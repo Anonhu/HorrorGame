@@ -6,11 +6,11 @@
 
 ```
 resourcepack/
-├── pack.mcmeta                  описание пака (формат 40–99, чтобы не сломаться на 26.3)
+├── pack.mcmeta                  формат ресурспака 26.3: 97, [97,0]–[97,1]
 ├── pack.png                     64×64 иконка: фонарь в ночи
 ├── assets/minecraft/textures/
-│   ├── block/                   36 текстур блоков
-│   └── item/                    7 иконок предметов
+│   ├── block/                   37 текстур блоков
+│   └── item/                    5 иконок + 32 кадра компаса
 ├── ps1-halloween.zip            готовый пак — его раздаёт сервер
 ├── preview.png                  лист всех текстур (увеличение ×8)
 └── tools/
@@ -26,8 +26,10 @@ resourcepack/
 | трава | `grass_block_top`, `grass_block_side`, `grass_block_side_overlay` |
 | дерево | `oak_planks`, `spruce_planks`, `dark_oak_planks`, `oak_log`, `oak_log_top`, `dark_oak_log`, `pale_oak_leaves`, `oak_leaves`, `fern`, `sculk_vein` |
 | свет | `lantern`, `soul_lantern`, `torch`, `soul_torch`, `candle`, `candle_lit`, `campfire_log`, `campfire_log_lit`, `campfire_fire`, `beacon`, `lodestone` |
-| двор | `dark_oak_door`, `iron_bars`, `red_wool` |
-| предметы | `lantern`, `soul_lantern`, `candle`, `campfire`, `beacon`, `dark_oak_door`, `recovery_compass` |
+| двор | `dark_oak_door_top`, `dark_oak_door_bottom`, `iron_bars`, `red_wool` |
+| камень-магнит | `lodestone_side`, `lodestone_top` |
+| предметы | `lantern`, `soul_lantern`, `candle`, `campfire`, `dark_oak_door` |
+| компас | `recovery_compass_00…31` — 32 кадра, стрелка поворачивается |
 
 Все имена — ванильные, поэтому пак работает и в обычном мире, не только на нашем сервере.
 
@@ -58,9 +60,24 @@ bash tools/make-assets.sh        # текстуры → zip пака → zip ш�
   меняется вся палитра;
 * `dither()` — матрица Байера 4×4; замените на 2×2 для более грубого вида.
 
-## Честно про формат
+## Формат: ровно 26.3
 
-`pack_format: 65` + `supported_formats: [40, 99]`: точный номер для 26.3 в этой
-песочнице проверить негде, поэтому диапазон широкий — клиент примет пак при любой
-раскладке 1.21–26.3. Если клиент ругнётся на формат, поправьте число в `pack.mcmeta`
-(иконка и текстуры от этого не зависят).
+```json
+"pack_format": 97,
+"min_format": [97, 0],
+"max_format": [97, 1]
+```
+
+Это значения настоящего 26.3 (`resource_pack_version: 97.1`). В 26.x формат задаётся
+парой чисел — одним `pack_format` уже не обойтись, поэтому указаны все три поля.
+
+Проверка одной командой:
+
+```bash
+python3 tools/verify_26_3.py
+```
+
+Она сверяет формат и **каждый** PNG со списком файлов клиента 26.3 и падает, если
+хоть одно имя не существует. Именно так выяснилось, что дверь и лодстоун в 26.3
+разбиты на `_top`/`_bottom` и `_side`/`_top`, а компас — на 32 кадра: первая версия
+пака ссылалась на несуществующие файлы и просто не применилась бы.

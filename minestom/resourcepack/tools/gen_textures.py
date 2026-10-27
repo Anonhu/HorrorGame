@@ -317,15 +317,33 @@ def iron_bars(img):
                 ramp(img, x, y, [IRON_D, IRON_M, IRON_L], 0.3 + hsh(x, y, 36) * 0.6)
 
 
-def lodestone(img):
+def lodestone_side(img):
     stone(img)
-    for i in range(16):  # руна
-        x, y = i, 8
-        put(img, x, y, (18, 18, 22))
-    for (x, y) in [(4, 4), (11, 4), (4, 11), (11, 11), (7, 7), (8, 8)]:
-        ramp(img, x, y, [FIRE_D, FIRE_M], 0.6)
-    for (x, y) in [(5, 5), (10, 10), (10, 5), (5, 10)]:
+    for y in range(H):
+        for x in range(W):
+            if y in (4, 5, 10, 11) and 2 <= x <= 13:
+                put(img, x, y, (16, 16, 20))
+            elif x in (7, 8) and 3 <= y <= 12 and y % 3 == 0:
+                ramp(img, x, y, [FIRE_D, FIRE_M], 0.6)
+    for (x, y) in [(3, 7), (12, 7), (3, 8), (12, 8)]:
         put(img, x, y, PURPLE_L)
+
+
+def lodestone_top(img):
+    for y in range(H):
+        for x in range(W):
+            d = ((x - 7.5) ** 2 + (y - 7.5) ** 2) ** 0.5
+            if d > 6.6:
+                ramp(img, x, y, [STONE_D, STONE_M], 0.3 + hsh(x, y, 49) * 0.5)
+            elif d > 5.2:
+                put(img, x, y, (14, 14, 18))
+            elif d > 2.6:
+                ramp(img, x, y, [STONE_M, STONE_L], 0.35 + hsh(x, y, 50) * 0.5)
+            else:
+                ramp(img, x, y, [PURPLE_D, PURPLE_M, PURPLE_L], 0.4 + (1 - d / 2.6) * 0.6)
+    for i in range(8):
+        a = i * 0.785
+        put(img, 8 + int(round(__import__("math").cos(a) * 4.4)), 8 + int(round(__import__("math").sin(a) * 4.4)), FIRE_M)
 
 
 def campfire_logs(img, lit=False):
@@ -373,29 +391,38 @@ def beacon(img):
                 ramp(img, x, y, [SOUL_D, SOUL_M, SOUL_L], 0.9 - d / 8.0)
 
 
-def door(img):
+def door(img, top=False):
     for y in range(H):
         for x in range(W):
-            if x in (1, 14) or y == 0:
-                ramp(img, x, y, [WOOD_D, WOOD_M], 0.4)
-            elif y == 5 or y == 10:
+            if x in (1, 2, 13, 14):
+                ramp(img, x, y, [WOOD_D, WOOD_M], 0.35 + hsh(x, y, 44) * 0.3)
+            elif y in (0, 15):
                 ramp(img, x, y, [WOOD_D, WOOD_M], 0.3)
-            elif 3 <= y <= 4 and 10 <= x <= 12:
-                ramp(img, x, y, [PURPLE_D, PURPLE_M], 0.5)
+            elif top and 4 <= y <= 8 and 5 <= x <= 10:
+                ramp(img, x, y, [PURPLE_D, PURPLE_M, PURPLE_L], 0.3 + hsh(x, y, 47) * 0.6)
+            elif not top and 9 <= y <= 10 and 10 <= x <= 12:
+                ramp(img, x, y, [IRON_M, IRON_L], 0.5)
             else:
-                ramp(img, x, y, [WOOD_M, WOOD_L], 0.2 + hsh(x, y, 44) * 0.6)
+                ramp(img, x, y, [WOOD_M, WOOD_L], 0.18 + hsh(x, y, 48) * 0.62)
 
 
-def compass(img):
+def compass(img, frame=0):
+    """Один кадр из 32: тёмный циферблат и красная стрелка под углом frame*11.25°."""
+    import math
     for y in range(H):
         for x in range(W):
             d = ((x - 7.5) ** 2 + (y - 7.5) ** 2) ** 0.5
-            if 5.2 < d < 7.2:
-                ramp(img, x, y, [IRON_D, IRON_M, IRON_L], 0.4 + hsh(x, y, 45) * 0.5)
-            elif d <= 5.2:
-                ramp(img, x, y, [NIGHT, PURPLE_D], 0.3 + hsh(x, y, 46) * 0.5)
-    for i in range(6):
-        put(img, 7 + (i % 2), 3 + i, BLOOD_L if i < 3 else BONE_L)
+            if 5.0 < d < 7.1:
+                ramp(img, x, y, [IRON_D, IRON_M, IRON_L], 0.45 + hsh(x, y, 45) * 0.45)
+            elif d <= 5.0:
+                ramp(img, x, y, [NIGHT, PURPLE_D], 0.25 + hsh(x, y, 46) * 0.5)
+    a = (frame / 32.0) * 2 * math.pi - math.pi / 2
+    for step in range(1, 5):
+        r = step * 1.05
+        nx = 7.5 + math.cos(a) * r
+        ny = 7.5 + math.sin(a) * r
+        put(img, int(round(nx)), int(round(ny)), BLOOD_L if step < 3 else BONE_L)
+        put(img, int(round(nx)) - 1, int(round(ny)), BLOOD_M if step < 3 else BONE_D)
 
 
 # ───────────────────────── запись ─────────────────────────
@@ -471,6 +498,11 @@ def write_generic(path, img):
 
 
 def main():
+    import shutil
+    for d in (OUT_BLOCK, OUT_ITEM):
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+
     blocks = {}
 
     def add(name, fn, *a, **kw):
@@ -506,33 +538,40 @@ def main():
     add("candle", candle, lit=False)
     add("candle_lit", candle, lit=True)
     add("iron_bars", iron_bars)
-    add("lodestone", lodestone)
+    add("lodestone_side", lodestone_side)
+    add("lodestone_top", lodestone_top)
     add("campfire_log", campfire_logs)
     add("campfire_log_lit", campfire_logs, lit=True)
     add("campfire_fire", campfire_fire)
     add("red_wool", wool, BLOOD_M)
     add("beacon", beacon)
-    add("dark_oak_door", door)
-    add("recovery_compass", compass)
+    # дверь в 26.3 — две отдельные текстуры
+    add("dark_oak_door_top", door, top=True)
+    add("dark_oak_door_bottom", door, top=False)
 
     for name, img in blocks.items():
         write_png(os.path.join(OUT_BLOCK, name + ".png"), img)
 
-    # иконки предметов — те же мотивы, отдельная папка
     items = {
         "lantern": blocks["lantern"],
         "soul_lantern": blocks["soul_lantern"],
         "candle": blocks["candle_lit"],
         "campfire": blocks["campfire_fire"],
-        "beacon": blocks["beacon"],
-        "dark_oak_door": blocks["dark_oak_door"],
-        "recovery_compass": blocks["recovery_compass"],
+        "dark_oak_door": blocks["dark_oak_door_top"],
     }
     for name, img in items.items():
         write_png(os.path.join(OUT_ITEM, name + ".png"), img)
 
+    # recovery_compass в 26.3 — 32 отдельных кадра
+    frames = 0
+    for i in range(32):
+        img = blank()
+        compass(img, i)
+        write_png(os.path.join(OUT_ITEM, "recovery_compass_%02d.png" % i), quantize(img))
+        frames += 1
+
     write_generic(os.path.join(os.path.dirname(__file__), "..", "pack.png"), pack_icon())
-    print("текстур:", len(blocks), "+ предметов:", len(items))
+    print("блоков:", len(blocks), "| предметов:", len(items) + frames, "(в т.ч. кадров компаса:", frames, ")")
 
 
 if __name__ == "__main__":

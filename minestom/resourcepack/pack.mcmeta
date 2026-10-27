@@ -1,9 +1,14 @@
 {
   "pack": {
-    "pack_format": 65,
-    "supported_formats": [40, 99],
-    "min_format": 40,
-    "max_format": 99,
-    "description": "§4ХЭЛЛОУИН · ТРИ НОЧИ§r §8·§r PS1-текстуры 16×16, 15 бит"
+    "description": "§4ХЭЛЛОУИН · ТРИ НОЧИ§r §8·§r PS1 16×16 · 15 бит · 26.3",
+    "pack_format": 97,
+    "min_format": [
+      97,
+      0
+    ],
+    "max_format": [
+      97,
+      1
+    ]
   }
 }

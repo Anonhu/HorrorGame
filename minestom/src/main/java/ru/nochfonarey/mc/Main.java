@@ -33,6 +33,14 @@ public final class Main {
         MinecraftServer server = MinecraftServer.init(new Auth.Offline());
         MinecraftServer.setCompressionThreshold(0);
 
+        // 26.3 — это протокол 777 и resource pack 97.1; проверяем, что ветка Minestom та самая
+        String mcVersion = MinecraftServer.VERSION_NAME;
+        int protocol = MinecraftServer.PROTOCOL_VERSION;
+        if (!"26.3".equals(mcVersion) || protocol != 777) {
+            System.out.println("[!] Minestom собран под " + mcVersion + " (protocol " + protocol
+                    + "), а игра рассчитана на 26.3 / 777 — клиент 26.3 может не подключиться");
+        }
+
         // PS1-пак раздаётся встроенным HTTP-сервером с того же проекта
         int packPort = 8123;
         String packEnv = System.getenv("PACK_PORT");
@@ -62,6 +70,8 @@ public final class Main {
                                 .append(Component.newline())
                                 .append(Component.text("Фонарщики · Эстафета света · Постоялый двор",
                                         NamedTextColor.GRAY)))
+                        .versionInfo(new Status.VersionInfo("26.3", 777))
+                        .playerInfo(Status.PlayerInfo.online(0))
                         .build()));
 
         Task task = MinecraftServer.getSchedulerManager()
@@ -79,7 +89,7 @@ public final class Main {
 
         server.start("0.0.0.0", port);
         System.out.println("──────────────────────────────────────────────");
-        System.out.println("  ТРИ НОЧИ · Minestom 26.3 · порт " + port);
+        System.out.println("  ТРИ НОЧИ · Minestom " + mcVersion + " · protocol " + protocol + " · порт " + port);
         System.out.println("  /h create lantern|relay|inn   /h join КОД   /h start");
         if (packs != null && packs.hasPack()) {
             System.out.println("  PS1-пак: http://<ip>:" + packPort + "/pack.zip (клиенту уходит сам)");

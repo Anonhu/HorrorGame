@@ -81,6 +81,12 @@ public final class PackServer {
                 case "/shaders/ps1-lite.zip" -> file(ex, root.resolve("shaderpack").resolve("ps1-lite.zip"));
                 case "/shaders/ps1-full.zip" -> file(ex, root.resolve("shaderpack").resolve("ps1-full.zip"));
                 case "/pack.png" -> file(ex, root.resolve("resourcepack").resolve("pack.png"));
+                case "/version", "/version.json" -> send(ex, 200, "application/json; charset=utf-8",
+                        ("""
+                                {"minecraft":"26.3","protocol":777,"resource_pack":"97.1",
+                                 "pack_format":97,"min_format":[97,0],"max_format":[97,1],
+                                 "pack":"%s"}
+                                """.formatted(hasPack() ? "готов" : "не собран")).getBytes(StandardCharsets.UTF_8));
                 default -> send(ex, 404, "text/plain; charset=utf-8", "нет такого файла".getBytes(StandardCharsets.UTF_8));
             }
         } catch (Exception e) {
