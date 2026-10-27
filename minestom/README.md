@@ -13,6 +13,8 @@ minestom/
 │   ├── InnMode.java                     «Постоялый двор» — свечи, комнаты, улики, «не гость»
 │   ├── Room / GameServer / Mode / P     комнаты, коды, тик, состояние игрока
 │   └── SelfTest.java                    30 проверок правил, без Minecraft
+├── resourcepack/                       PS1-текстуры 16×16 (генератор + готовый zip)
+├── shaderpack/                         PS1-шейдеры Iris/OptiFine (lite и full)
 └── src/main/java/ru/nochfonarey/mc/     слой Minecraft
     ├── Main.java                        точка входа, порт 25565
     ├── Hub.java                         лобби, комнаты, тик 20 Гц, HUD
@@ -65,6 +67,23 @@ cd Minestom && ./gradlew publishToMavenLocal
 4. Хозяин: `/h start`. Всё, раунд пошёл.
 
 ПКМ по предмету в слотах 4–6 тоже создаёт комнату, `/h` без аргументов — справка.
+
+## PS1-стиль: текстуры и шейдеры
+
+Сервер сам поднимает раздачу на порту **8123** (`PACK_PORT`) и при входе присылает
+клиенту ресурспак:
+
+| | |
+|---|---|
+| `http://localhost:8123/` | страничка со ссылками |
+| `http://localhost:8123/pack.zip` | PS1-ресурспак: 16×16, 15 бит, 36 блоков + 7 предметов |
+| `http://localhost:8123/shaders/ps1-full.zip` | шейдер Iris/OptiFine: джиттер, сканлайны, дрожание вершин |
+| `http://localhost:8123/shaders/ps1-lite.zip` | то же без вмешательства в геометрию |
+
+Текстуры генерируются из палитры кодом — `bash tools/make-assets.sh` пересобирает
+и PNG, и оба zip. Подробности: [`resourcepack/README.md`](resourcepack/README.md),
+[`shaderpack/README.md`](shaderpack/README.md), превью — `resourcepack/preview.png`
+и `shaderpack/preview.png`.
 
 ## Управление
 

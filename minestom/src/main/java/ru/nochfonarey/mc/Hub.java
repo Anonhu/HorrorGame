@@ -34,6 +34,9 @@ public final class Hub {
 
     public static Hub I;
 
+    /** Раздача PS1-пака; может быть null, если порт занят. */
+    public PackServer packs;
+
     private final InstanceContainer lobby;
     private final List<GameServer> servers = new ArrayList<>();
     private final Map<UUID, NetHost> hostOf = new HashMap<>();

@@ -11,6 +11,7 @@ import net.minestom.server.event.player.PlayerBlockInteractEvent;
 import net.minestom.server.event.player.PlayerBlockPlaceEvent;
 import net.minestom.server.event.player.PlayerChatEvent;
 import net.minestom.server.event.player.PlayerDisconnectEvent;
+import net.minestom.server.event.player.PlayerResourcePackStatusEvent;
 import net.minestom.server.event.player.PlayerSpawnEvent;
 import net.minestom.server.event.player.PlayerSwapItemEvent;
 import net.minestom.server.event.player.PlayerUseItemEvent;
@@ -42,8 +43,12 @@ public final class Interact {
             Player player = event.getPlayer();
             player.setGameMode(net.minestom.server.entity.GameMode.ADVENTURE);
             Hub.giveLobbyKit(player);
+            sendPack(hub, player);
             greet(player);
         });
+
+        events.addListener(PlayerResourcePackStatusEvent.class, event ->
+                System.out.println("[pack] " + event.getPlayer().getUsername() + ": " + event.getStatus()));
 
         events.addListener(PlayerDisconnectEvent.class, event ->
                 hub.leave(event.getPlayer(), false));
@@ -177,12 +182,33 @@ public final class Interact {
         player.openInventory(inv);
     }
 
+    /** Клиенту уходит PS1-пак со своего же адреса, с которого он зашёл. */
+    private static void sendPack(Hub hub, Player player) {
+        PackServer packs = hub.packs;
+        if (packs == null || !packs.hasPack()) return;
+        String host = null;
+        try {
+            host = player.getPlayerConnection().getServerAddress();
+        } catch (RuntimeException ignored) {
+            // адрес недоступен — PackServer подставит localhost
+        }
+        String url = packs.urlFor(host);
+        player.sendPacket(new net.minestom.server.network.packet.server.common.ResourcePackPushPacket(
+                java.util.UUID.nameUUIDFromBytes(url.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                url,
+                packs.hash(),
+                false,
+                Component.text("ТРИ НОЧИ · PS1-текстуры и шрифт (необязательно)", NamedTextColor.GOLD)));
+        System.out.println("[pack] " + player.getUsername() + " -> " + url);
+    }
+
     private static void greet(Player player) {
         player.sendMessage(Component.text(""));
         player.sendMessage(Component.text("  ХЭЛЛОУИН · ТРИ НОЧИ", NamedTextColor.DARK_RED));
         player.sendMessage(Component.text("  /h create lantern | relay | inn  — собрать комнату", NamedTextColor.GRAY));
         player.sendMessage(Component.text("  /h join КОД — зайти к друзьям   /h start — начать", NamedTextColor.GRAY));
         player.sendMessage(Component.text("  ПКМ по предмету в слоте 4-6 тоже создаёт комнату", NamedTextColor.DARK_GRAY));
+        player.sendMessage(Component.text("  PS1-шейдеры: /shaders/ps1-full.zip на порту раздачи пака", NamedTextColor.DARK_GRAY));
         player.sendMessage(Component.text(""));
     }
 }

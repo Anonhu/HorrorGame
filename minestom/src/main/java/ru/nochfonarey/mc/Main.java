@@ -9,6 +9,8 @@ import net.minestom.server.ping.Status;
 import net.minestom.server.timer.Task;
 import net.minestom.server.utils.time.TimeUnit;
 
+import java.nio.file.Path;
+
 /**
  * ТРИ НОЧИ — сервер на Minestom 26.3 (Minecraft Java 26.3, Java 25).
  *
@@ -31,7 +33,26 @@ public final class Main {
         MinecraftServer server = MinecraftServer.init(new Auth.Offline());
         MinecraftServer.setCompressionThreshold(0);
 
+        // PS1-пак раздаётся встроенным HTTP-сервером с того же проекта
+        int packPort = 8123;
+        String packEnv = System.getenv("PACK_PORT");
+        if (packEnv != null && !packEnv.isBlank()) {
+            try {
+                packPort = Integer.parseInt(packEnv.trim());
+            } catch (NumberFormatException ignored) {
+                // остаёмся на 8123
+            }
+        }
+        PackServer packs = null;
+        try {
+            packs = new PackServer(Path.of("").toAbsolutePath(), packPort);
+            packs.start();
+        } catch (Exception e) {
+            System.out.println("[pack] не удалось поднять раздачу пака: " + e.getMessage());
+        }
+
         Hub hub = new Hub();
+        hub.packs = packs;
         MinecraftServer.getCommandManager().register(new Cmd(hub));
         Interact.register(hub);
 
@@ -48,9 +69,11 @@ public final class Main {
                 .repeat(1, TimeUnit.SERVER_TICK)
                 .schedule();
 
+        PackServer packRef = packs;
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             task.cancel();
             hub.shutdown();
+            if (packRef != null) packRef.stop();
             MinecraftServer.stopCleanly();
         }, "halloween-shutdown"));
 
@@ -58,6 +81,12 @@ public final class Main {
         System.out.println("──────────────────────────────────────────────");
         System.out.println("  ТРИ НОЧИ · Minestom 26.3 · порт " + port);
         System.out.println("  /h create lantern|relay|inn   /h join КОД   /h start");
+        if (packs != null && packs.hasPack()) {
+            System.out.println("  PS1-пак: http://<ip>:" + packPort + "/pack.zip (клиенту уходит сам)");
+            System.out.println("  Шейдеры: http://<ip>:" + packPort + "/shaders/ps1-full.zip");
+        } else if (packs != null) {
+            System.out.println("  Пак не собран: bash tools/make-assets.sh");
+        }
         System.out.println("──────────────────────────────────────────────");
     }
 }
