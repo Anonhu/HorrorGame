@@ -4,7 +4,7 @@
 import { api, listRooms, Net } from './net.js';
 import { Input } from './input.js';
 import { Renderer } from './render.js';
-import { UI, fmt } from './ui.js';
+import { UI, MODE_TITLES } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -200,7 +200,12 @@ function onSnapshot(snap) {
       ui.setScreen('game');
       const me = snap.players.find((p) => p.id === state.me.id);
       state.view = me ? { x: me.x, y: me.y } : null;
-      ui.banner('ВОЙНА СВЕТА', 'НАЧАЛИ', 'удачи', 1600);
+      const hints = {
+        lantern: 'несите дрова, кормите костры, держите фонари заряженными',
+        relay: 'фонарь один: донесите его до часовни и разбейте у алтаря',
+        inn: 'свечи гаснут. слушайте, кто где был',
+      };
+      ui.banner('РАУНД НАЧАЛСЯ', MODE_TITLES[snap.mode] || '', hints[snap.mode] || '', 3600);
     }
     net.rate = 66;
     if (!state.view) {

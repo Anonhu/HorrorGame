@@ -43,6 +43,8 @@ const MODE_RULES = {
   },
 };
 
+export { MODE_TITLES, MODE_RULES };
+
 export class UI {
   constructor() {
     this.lastVoteKey = '';
@@ -134,8 +136,8 @@ export class UI {
     $('btn-ready').textContent = mine && mine.ready ? 'Я НЕ ГОТОВ' : 'Я ГОТОВ';
     $('btn-start').classList.toggle('hidden', !isHost);
     $('lobby-hint').textContent = isHost
-      ? 'ты хозяин: добавь ботов или запускай'
-      : 'хозяин запускает игру, когда все готовы';
+      ? 'ты хозяин: добавь ботов и жми «начать» в любой момент'
+      : 'жми «я готов» — хозяин увидит и запустит';
   }
 
   /* ---------------- HUD ---------------- */
