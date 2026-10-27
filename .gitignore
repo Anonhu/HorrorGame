@@ -1,0 +1,18 @@
+# node / vite
+node_modules/
+dist/
+.vite/
+*.log
+
+# java / gradle
+.gradle/
+build/
+out/
+*.class
+*.jar
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

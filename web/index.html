@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05080b" />
+  <title>ЛЕС СЛУШАЕТ — Halloween 26.3</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl"></canvas>
+
+    <!-- filmic layers -->
+    <div class="fx-layer grain"></div>
+    <div class="fx-layer vignette"></div>
+    <div class="fx-layer scan"></div>
+    <div class="fx-layer flash" id="flash"></div>
+    <div class="fx-layer freeze" id="freeze"></div>
+    <div class="letterbox top"></div>
+    <div class="letterbox bottom"></div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="objective">
+          <span class="label">ОБРЯД</span>
+          <span class="value" id="obj-text">зажги 4 тотема</span>
+          <span class="counter" id="obj-count">0 / 4</span>
+        </div>
+        <div class="compass" id="compass">
+          <div class="compass-tape" id="compass-tape"></div>
+          <div class="compass-needle"></div>
+          <div class="compass-target" id="compass-target">◆</div>
+        </div>
+        <div class="night">
+          <span class="label">НОЧЬ ФОНАРЕЙ</span>
+          <span class="value" id="clock">23:40</span>
+        </div>
+      </div>
+
+      <div class="hud-bottom">
+        <div class="vitals">
+          <div class="hearts" id="hearts">
+            <i></i><i></i><i></i>
+          </div>
+          <div class="meter noise">
+            <span class="m-label">ШУМ</span>
+            <div class="m-track"><div class="m-fill" id="noise-fill"></div></div>
+          </div>
+          <div class="meter dread">
+            <span class="m-label">ВЗГЛЯД</span>
+            <div class="m-track"><div class="m-fill" id="dread-fill"></div></div>
+          </div>
+        </div>
+        <div class="lantern" id="lantern-state">
+          <div class="flame" id="flame-ico"></div>
+          <div class="lantern-text">
+            <span class="label">ФОНАРЬ</span>
+            <span class="value" id="lantern-value">зажжён</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="crosshair" id="crosshair"></div>
+      <div class="subtitle" id="subtitle"></div>
+      <div class="prompt hidden" id="prompt"></div>
+      <div class="ping-hint" id="ping-hint">E — эхо</div>
+    </div>
+
+    <!-- TITLE -->
+    <div class="screen title" id="screen-title">
+      <div class="keyart"></div>
+      <div class="title-inner">
+        <div class="kicker">MINESTOM 26.3 · ХЭЛЛОУИН · ВЕРТИКАЛЬНЫЙ СРЕЗ</div>
+        <h1>ЛЕС<br/><em>СЛУШАЕТ</em></h1>
+        <p class="tagline">Он не видит тебя. Он слышит.<br/>И двигается, когда ты не смотришь.</p>
+        <div class="menu">
+          <button class="btn primary" id="btn-start">ВОЙТИ В ЛЕС</button>
+          <button class="btn" id="btn-howto">УПРАВЛЕНИЕ</button>
+          <button class="btn" id="btn-sound">ЗВУК: ВКЛ</button>
+        </div>
+        <div class="credit">прототип · three.js · процедурный визуал и звук</div>
+      </div>
+    </div>
+
+    <!-- HOWTO -->
+    <div class="screen panel hidden" id="screen-howto">
+      <div class="panel-inner">
+        <h2>КАК ВЫЖИТЬ</h2>
+        <div class="cols">
+          <div>
+            <h3>Управление</h3>
+            <ul class="keys">
+              <li><b>W A S D</b> идти</li>
+              <li><b>Shift</b> бежать · <b>Ctrl</b> красться</li>
+              <li><b>Мышь</b> смотреть</li>
+              <li><b>E / ЛКМ</b> эхо-импульс</li>
+              <li><b>F / ПКМ</b> фонарь вкл/выкл</li>
+              <li><b>Esc</b> пауза</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Три правила</h3>
+            <p><b>1. Тишина — жизнь.</b> Бег и фонарь поднимают ШУМ. Шум ведёт его к тебе.</p>
+            <p><b>2. Не смотри слишком долго.</b> Пока взгляд на нём — он замирает. Дольше трёх секунд — он бросится.</p>
+            <p><b>3. Зажги четыре тотема.</b> Ищи кровавую листву на земле — она ведёт от тотема к тотему.</p>
+          </div>
+        </div>
+        <div class="echo-note">Эхо показывает мир на миг: стволы, тотемы и <b>его</b>. Эхо шумит — но без него не найти дорогу.</div>
+        <button class="btn primary" id="btn-howto-back">НАЗАД</button>
+      </div>
+    </div>
+
+    <!-- PAUSE -->
+    <div class="screen panel hidden" id="screen-pause">
+      <div class="panel-inner narrow">
+        <h2>ПАУЗА</h2>
+        <p class="dim">Лес ждёт. Он никуда не ушёл.</p>
+        <button class="btn primary" id="btn-resume">ПРОДОЛЖИТЬ</button>
+        <button class="btn" id="btn-pause-howto">УПРАВЛЕНИЕ</button>
+        <button class="btn" id="btn-quit">В ГЛАВНОЕ МЕНЮ</button>
+        <div class="settings">
+          <label>Чувствительность <input type="range" id="opt-sens" min="0.2" max="2.5" step="0.05" value="1"></label>
+          <label>Звук <input type="range" id="opt-vol" min="0" max="1" step="0.02" value="0.85"></label>
+          <label>Качество <select id="opt-quality"><option value="high">высокое</option><option value="low">низкое</option></select></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- END -->
+    <div class="screen end hidden" id="screen-end">
+      <div class="end-inner">
+        <div class="kicker" id="end-kicker">ОБРЯД</div>
+        <h1 id="end-title">ЛЕС ПРИНЯЛ<br/>ТЕБЯ</h1>
+        <p class="tagline" id="end-text"></p>
+        <div class="stats" id="end-stats"></div>
+        <div class="menu">
+          <button class="btn primary" id="btn-retry">СНОВА В ЛЕС</button>
+          <button class="btn" id="btn-end-menu">ГЛАВНОЕ МЕНЮ</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" class="boot">
+      <div class="boot-title">ЛЕС СЛУШАЕТ</div>
+      <div class="boot-bar"><i id="boot-fill"></i></div>
+      <div class="boot-note" id="boot-note">он уже проснулся…</div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
