@@ -94,6 +94,8 @@ public final class Interact {
 
         events.addListener(InventoryPreClickEvent.class, event -> {
             Player player = event.getPlayer();
+            // клики в своём инвентаре — не наши: иначе перенос предмета создаёт комнату
+            if (event.getInventory() == player.getInventory()) return;
             event.setCancelled(true);
             Room room = hub.roomOf(player);
             if (room == null) {
