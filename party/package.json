@@ -1,0 +1,17 @@
+{
+  "name": "noch-fonarey",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "НОЧЬ ФОНАРЕЙ — три мультиплеерных режима на 4-16 игроков (Фонарщики, Эстафета света, Постоялый двор)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/sim.test.mjs test/client.test.mjs",
+    "test:sim": "node --test test/sim.test.mjs",
+    "test:client": "node --test test/client.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

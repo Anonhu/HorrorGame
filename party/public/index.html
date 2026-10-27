@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#05080b" />
+  <title>НОЧЬ ФОНАРЕЙ — 3 режима на 4–16</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <!-- filmic layers -->
+  <div class="fx grain"></div>
+  <div class="fx vignette"></div>
+  <div class="fx scan"></div>
+
+  <!-- ================= HUD (in game) ================= -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-left">
+        <span class="tag" id="hud-mode">ФОНАРЩИКИ</span>
+        <span class="hud-timer" id="hud-timer">10:00</span>
+      </div>
+      <div class="hud-center" id="hud-center"></div>
+      <div class="hud-right">
+        <span class="tag dim" id="hud-room">КОМНАТА 0000</span>
+        <button class="mini" id="btn-share">ПОДЕЛИТЬСЯ</button>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div id="hud-stats" class="hud-stats"></div>
+      <div id="hud-role" class="hud-role hidden"></div>
+      <div class="hud-help" id="hud-help"></div>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+    <div class="banner hidden" id="banner"></div>
+    <div class="clues hidden" id="clues"></div>
+    <div class="vote hidden" id="vote"></div>
+  </div>
+
+  <!-- ================= MENU ================= -->
+  <section class="screen menu" id="screen-menu">
+    <div class="menu-art"></div>
+    <div class="menu-inner">
+      <div class="kicker">MINESTOM 26.3 · ХЭЛЛОУИН · МУЛЬТИПЛЕЕР 4–16</div>
+      <h1>НОЧЬ<br /><em>ФОНАРЕЙ</em></h1>
+      <p class="tagline">Три игры в одном лесу. Одна ссылка — и вся компания внутри.</p>
+
+      <div class="row">
+        <label class="field">
+          <span>ТВОЁ ИМЯ</span>
+          <input id="inp-name" maxlength="16" placeholder="Фонарщик" />
+        </label>
+      </div>
+
+      <div class="modes" id="modes">
+        <button class="mode-card" data-mode="lantern">
+          <span class="mode-num">01</span>
+          <b>ФОНАРЩИКИ</b>
+          <span class="mode-sub">PvPvE · 10 мин · 2–16</span>
+          <span class="mode-desc">4 костра, дрова и тайная Тень. Сколько огня доживёт до рассвета — столько уйдёт по мосту.</span>
+        </button>
+        <button class="mode-card" data-mode="relay">
+          <span class="mode-num">02</span>
+          <b>ЭСТАФЕТА СВЕТА</b>
+          <span class="mode-sub">кооп · 12 мин · 2–16</span>
+          <span class="mode-desc">Один фонарь на всех. Кто держит — видит. Финал: разбей его у алтаря и останься.</span>
+        </button>
+        <button class="mode-card" data-mode="inn">
+          <span class="mode-num">03</span>
+          <b>ПОСТОЯЛЫЙ ДВОР</b>
+          <span class="mode-sub">дедукция · 7 мин · 3–16</span>
+          <span class="mode-desc">Свечи, замки, улики. Один из вас — не гость. Заприте его до рассвета.</span>
+        </button>
+      </div>
+
+      <div class="join-row">
+        <label class="field small">
+          <span>КОД КОМНАТЫ</span>
+          <input id="inp-code" maxlength="4" inputmode="numeric" placeholder="0000" />
+        </label>
+        <button class="btn" id="btn-join">ВОЙТИ ПО КОДУ</button>
+        <button class="btn ghost" id="btn-rules">ПРАВИЛА</button>
+      </div>
+
+      <div class="rooms" id="rooms"></div>
+      <div class="menu-foot">
+        <span id="net-state">● сервер на связи</span>
+        <span class="dim">открывай несколько вкладок — это и есть мультиплеер</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LOBBY ================= -->
+  <section class="screen lobby hidden" id="screen-lobby">
+    <div class="lobby-inner">
+      <div class="lobby-head">
+        <div>
+          <div class="kicker" id="lobby-mode">ФОНАРЩИКИ</div>
+          <h2>КОМНАТА <span id="lobby-code">0000</span></h2>
+        </div>
+        <button class="btn ghost" id="btn-leave">ВЫЙТИ</button>
+      </div>
+
+      <div class="lobby-cols">
+        <div class="players-box">
+          <div class="box-title">ИГРОКИ <span id="lobby-count">1/16</span></div>
+          <ul id="lobby-players"></ul>
+          <div class="lobby-actions">
+            <button class="btn ghost" id="btn-bot">+ БОТ</button>
+            <button class="btn ghost" id="btn-bot3">+ 3 БОТА</button>
+          </div>
+        </div>
+        <div class="rules-box">
+          <div class="box-title">КАК ИГРАЕМ</div>
+          <div id="lobby-rules"></div>
+          <div class="box-title share-title">ПРИГЛАСИТЬ</div>
+          <div class="share">
+            <input readonly id="share-link" />
+            <button class="btn mini" id="btn-copy">КОПИРОВАТЬ</button>
+          </div>
+          <p class="dim small-note">Друзьям нужен только браузер. Код комнаты — на экране.</p>
+        </div>
+      </div>
+
+      <div class="lobby-foot">
+        <button class="btn primary" id="btn-ready">Я ГОТОВ</button>
+        <button class="btn primary start hidden" id="btn-start">НАЧАТЬ ИГРУ</button>
+        <span class="dim" id="lobby-hint">хозяин комнаты запускает игру, когда все готовы</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RULES ================= -->
+  <section class="screen rules hidden" id="screen-rules">
+    <div class="rules-inner">
+      <h2>ТРИ РЕЖИМА</h2>
+      <div id="rules-content"></div>
+      <button class="btn" id="btn-rules-back">НАЗАД</button>
+    </div>
+  </section>
+
+  <!-- ================= END ================= -->
+  <section class="screen end hidden" id="screen-end">
+    <div class="end-inner">
+      <div class="kicker" id="end-kicker">ИТОГ</div>
+      <h2 id="end-title">КОНЕЦ</h2>
+      <p class="tagline" id="end-text"></p>
+      <div class="end-stats" id="end-stats"></div>
+      <div class="row center">
+        <button class="btn primary" id="btn-again">ЕЩЁ РАЗ</button>
+        <button class="btn ghost" id="btn-menu">В МЕНЮ</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="boot" class="boot">
+    <div class="boot-title">НОЧЬ ФОНАРЕЙ</div>
+    <div class="boot-note" id="boot-note">зажигаем огни…</div>
+  </div>
+
+  <div id="toast-net" class="net-toast hidden"></div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
