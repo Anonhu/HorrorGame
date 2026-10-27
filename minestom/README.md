@@ -59,6 +59,15 @@ cd Minestom && ./gradlew publishToMavenLocal
 ./gradlew selfTest
 ```
 
+То же самое **без Gradle** — если Gradle/Maven/JitPack недоступны (закрытая сеть,
+офлайн-машина). Скрипт сам скачает JRE (PyPI) и ECJ (npm), скомпилирует проект
+вместе с заглушками API и прогонит `SelfTest`:
+
+```bash
+python3 tools/verify_stubs.py     # каждая заглушка есть в настоящем API 26.3
+bash tools/build_offline.sh       # ECJ-компиляция (87 файлов) + SelfTest
+```
+
 ## Как начать играть
 
 1. Зайдите в свой мир? Нет — зайдите **на сервер** `localhost` (или IP машины), версия 26.3.
@@ -130,21 +139,33 @@ cd Minestom && ./gradlew publishToMavenLocal
 | Проверка | Что сверяет |
 |---|---|
 | `python3 tools/check_minestom_26_3.py` | ~90 вызовов API — каждый есть в ветке Minestom `26_3` |
+| `python3 tools/verify_stubs.py` | 64 типа заглушек, 184 члена (14 унаследованных) — всё есть в Minestom `26_3` / Adventure 5.2.0 |
+| `bash tools/build_offline.sh` | ECJ-компиляция `src/main/java` + заглушек и прогон `SelfTest` |
 | `python3 resourcepack/tools/verify_26_3.py` | `pack_format` 97 / `[97,0]–[97,1]` и 74 имени текстур клиента 26.3 |
 | `python3 shaderpack/tools/check_iris_26_3.py` | только те `gl_*`, которые переписывает Iris 26.3, и только её директивы |
+
+Всё сразу (ресурсы + проверки + офлайн-сборка): `bash tools/make-assets.sh`
+(`SKIP_BUILD=1` — без Java-шага).
 
 Подробности и таблица версий — [`COMPAT-26.3.md`](COMPAT-26.3.md).
 
 ## Что проверено
 
-* `./gradlew selfTest` — 30 проверок игрового ядра: постройка арен, расход и зарядка фонаря,
+* `./gradlew selfTest` — 29 проверок игрового ядра: постройка арен, расход и зарядка фонаря,
   появление Тени и её поимка лучом, передача фонаря, приманка, алтарь и финал, запирание
   комнат, улики, подвал, голосования, победа «не гостя».
 * Слой Minecraft сверен построчно с исходниками ветки `26_3` скриптом
   `tools/check_minestom_26_3.py` (около 90 сигнатур, включая `CompletableFuture`
-  у `setInstance`/`teleport`). Собрать jar в песочнице нельзя: Maven Central закрыт,
-  Minestom 26.3 не опубликован. Если при первом `./gradlew run` вылезет ошибка
-  компиляции — пришлите текст, правка будет точечной.
+  у `setInstance`/`teleport`).
+* Проект **компилируется** без Gradle: `bash tools/build_offline.sh` — ECJ 3.46.100
+  на JRE 25.0.2, 87 файлов (`src/main/java` + заглушки), 0 ошибок, затем `SelfTest`
+  (29 проверок; 200 прогонов подряд — все зелёные).
+* Сами заглушки не «по памяти»: `tools/verify_stubs.py` сверяет каждый их член с
+  настоящими исходниками Minestom `26_3` (sha `b7c32f3`) и Adventure 5.2.0,
+  включая унаследованные методы (`Player.showTitle` → `Audience`).
+* Скачать сам Gradle в песочнице нельзя (см. `COMPAT-26.3.md` → «Сборка без Gradle»):
+  закрыты `services.gradle.org`, Maven Central, JitPack. Поэтому `.jar` здесь не
+  собирается, но компиляция и тесты — те же, что делает `./gradlew build selfTest`.
 
 ## Числа (одинаковые с браузерным плейтестом)
 

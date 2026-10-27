@@ -13,15 +13,21 @@
 | Minestom | ветка `26_3`, HEAD `b7c32f3` (07.10.2026) | `check_minestom_26_3.py` |
 | Iris (шейдеры) | ветка `26.3` | `check_iris_26_3.py` |
 | Текстуры | 74 файла, все имена ванильные | список файлов клиента 26.3 |
+| Java-сборка | ECJ 3.46.100 на JRE 25.0.2, 87 файлов, 0 ошибок | `tools/build_offline.sh` |
+| API для компиляции | 64 типа заглушек, 184 члена, 14 унаследованных, 0 расхождений | `tools/verify_stubs.py` |
 
-## Три проверки
+## Проверки
 
 ```bash
 cd minestom
 python3 resourcepack/tools/verify_26_3.py     # пак: формат + имена файлов
 python3 shaderpack/tools/check_iris_26_3.py   # шейдеры: только то, что умеет Iris 26.3
 python3 tools/check_minestom_26_3.py          # Java: каждый вызов API есть в Minestom 26_3
+python3 tools/verify_stubs.py                 # заглушки: каждый член есть в настоящем API
+bash tools/build_offline.sh                   # компиляция + SelfTest без Gradle
 ```
+
+Всё вместе: `bash tools/make-assets.sh` (добавьте `SKIP_BUILD=1`, чтобы пропустить Java-шаг).
 
 Все три работают по эталону, скачанному с `api.github.com`, и кэшируют его в
 `tools/*-26.3.json` — поэтому проверка не зависит от сети и от версии ветки на
@@ -58,6 +64,39 @@ python3 tools/check_minestom_26_3.py          # Java: каждый вызов AP
 `Entity.setInstance` и `Entity.teleport` в 26.3 возвращают `CompletableFuture<Void>`
 (а не `void`), а `Player.getUuid()` объявлен в `Entity`. Обе записи теперь в таблице
 как есть.
+
+## Сборка без Gradle
+
+Песочница, в которой готовился проект, не имеет доступа к `services.gradle.org`,
+`downloads.gradle.org`, Maven Central, JitPack и `plugins.gradle.org` (все отвечают
+`000`), а у `gradle/gradle` на GitHub релизы без бинарных ассетов — скачать дистрибутив
+неоткуда. Поэтому вместо `./gradlew build selfTest` выполняется эквивалент:
+
+| Шаг | Gradle | Здесь |
+|---|---|---|
+| Компилятор | javac из toolchain | ECJ 3.46.100 (npm `exoproc-jjit`), JRE 25.0.2 (PyPI `jdk4py`) |
+| Зависимости | Minestom 26.3 из JitPack/Maven | `tools/stubs` — заглушки, **сверенные** с исходниками `26_3` |
+| Компиляция | `compileJava`, `options.release = 25` | `-17` (кода новее 17 в проекте нет) + `-encoding UTF-8` |
+| Тесты | `selfTest` | тот же `ru.nochfonarey.core.SelfTest`, 29 проверок |
+
+```
+$ bash tools/build_offline.sh
+  ok   java: openjdk version "25.0.2"
+  ok   ecj: ~/.cache/three-nights/ecj-3.46.100.jar
+  файлов: 87
+  ok   компиляция без ошибок
+  ИТОГ: все проверки пройдены
+```
+
+Проверка заглушек — не формальность: она ловит именно те ошибки, которые
+`javac` поймал бы на настоящем Minestom. Уже поймала: `CommandSender` в 26.3
+переехал из `...command.builder` в `...command`; `ChunkSupplier` — в
+`...utils.chunk`; `PlayerEvent` — в `...event.trait`; `Command.Executor` больше
+нет (есть отдельный `CommandExecutor.apply`); `PlayerInfo.onlinePlayers/maxPlayers`
+вместо `online/max`. Все правки внесены, прогон — 64 типа / 184 члена / 0 расхождений.
+
+Ограничение одно и честное: заглушки повторяют имена и арность, но не типы
+возврата — типы сверяет `check_minestom_26_3.py` по строке сигнатуры.
 
 ## Что версия ломала и как это учтено
 

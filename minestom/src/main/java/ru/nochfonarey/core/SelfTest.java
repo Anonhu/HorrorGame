@@ -169,7 +169,10 @@ public final class SelfTest {
         }
         check(room.phase == Room.Phase.END, "после рассвета раунд закрылся");
         check(!room.summary.isEmpty(), "есть текст итога: " + room.summary);
-        check(host.blocks.containsValue(Keys.FIRE_ON), "костры построены");
+        // Важно не состояние на экране в самом конце (после рассвета костры
+        // догорают сами), а то, что игроки действительно их зажигали.
+        int ignites = room.players.values().stream().mapToInt(p -> p.ignites).sum();
+        check(ignites > 0, "костры построены (зажиганий за раунд: " + ignites + ")");
         check(host.sounds > 10, "звуки играются (" + host.sounds + ")");
 
         // отдельная проверка поимки Тени лучом
