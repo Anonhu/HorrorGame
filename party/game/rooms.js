@@ -258,7 +258,9 @@ class RoomManager {
 
   list() {
     return [...this.rooms.values()]
-      .filter((r) => r.phase === 'lobby' && r.players.size < MODES[r.mode].max)
+      .filter((r) => r.phase === 'lobby' &&
+        r.players.size < MODES[r.mode].max &&
+        [...r.players.values()].some((p) => !p.bot))
       .map((r) => ({ code: r.code, mode: r.mode, title: r.title, players: r.players.size, max: MODES[r.mode].max }));
   }
 
