@@ -16,3 +16,6 @@ out/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# gradle wrapper нужен в репозитории
+!minestom/gradle/wrapper/gradle-wrapper.jar

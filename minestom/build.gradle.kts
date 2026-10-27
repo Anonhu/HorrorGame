@@ -2,33 +2,45 @@ plugins {
     application
 }
 
-group = "ru.leshorror"
-version = "0.1.0"
+group = "ru.nochfonarey"
+version = "1.0.0"
 
 repositories {
+    // если Minestom 26.3 собран локально: ./gradlew publishToMavenLocal
+    mavenLocal()
     mavenCentral()
-    maven("https://jitpack.io")   // needed for the unreleased 26.3 branch
+    // ветка 26_3 ещё не в Maven Central — её собирает JitPack
+    maven("https://jitpack.io")
 }
 
 dependencies {
-    // ── Minecraft 26.3 "Wilderness Bound" ────────────────────────────────
-    // Minestom has not published 26.3 to Maven Central yet (PR #3369).
-    // JitPack builds the `26_3` branch. If it fails to build, comment the
-    // line below and use the latest stable 26.2 release instead:
-    //   implementation("net.minestom:minestom:2026.10.07-26.2")
     implementation("com.github.Minestom.Minestom:minestom:26_3-SNAPSHOT")
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25)) // Minecraft 26.x runs on Java 25
+        // Minecraft 26.3 требует Java 25
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
 application {
-    mainClass.set("ru.leshorror.Main")
+    mainClass.set("ru.nochfonarey.mc.Main")
 }
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+    options.release.set(25)
+}
+
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`
+    jvmArgs("-Dfile.encoding=UTF-8")
+}
+
+tasks.register<JavaExec>("selfTest") {
+    group = "verification"
+    description = "Прогон правил всех трёх режимов без Minecraft"
+    mainClass.set("ru.nochfonarey.core.SelfTest")
+    classpath = sourceSets["main"].runtimeClasspath
 }
