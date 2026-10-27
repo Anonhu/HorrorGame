@@ -41,7 +41,6 @@ public final class Interact {
             if (!event.isFirstSpawn()) return;
             Player player = event.getPlayer();
             player.setGameMode(net.minestom.server.entity.GameMode.ADVENTURE);
-            player.setInstance(hub.lobby(), Hub.LOBBY);
             Hub.giveLobbyKit(player);
             greet(player);
         });

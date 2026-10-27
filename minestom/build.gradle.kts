@@ -14,7 +14,10 @@ repositories {
 }
 
 dependencies {
+    // ветка 26_3, собранная JitPack (релиза в Maven Central пока нет)
     implementation("com.github.Minestom.Minestom:minestom:26_3-SNAPSHOT")
+    // если JitPack отдаёт корневой артефакт — используйте эту строку вместо верхней:
+    // implementation("com.github.Minestom:Minestom:26_3-SNAPSHOT")
 }
 
 java {

@@ -262,9 +262,15 @@ public final class Hub {
         for (GameServer gs : new ArrayList<>(servers)) {
             for (Room room : new ArrayList<>(gs.rooms)) {
                 NetHost host = (NetHost) room.host;
-                syncInput(room, host);
-                gs.tick(DT);
-                afterTick(room, host);
+                try {
+                    syncInput(room, host);
+                    gs.tick(DT);
+                    afterTick(room, host);
+                } catch (RuntimeException e) {
+                    // один сломанный раунд не должен ронять сервер
+                    System.err.println("[room " + room.code + "] " + e);
+                    e.printStackTrace();
+                }
             }
             gs.rooms.removeIf(r -> r.players.isEmpty());
         }

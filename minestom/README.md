@@ -33,7 +33,7 @@ minestom/
 
 ```bash
 cd minestom
-./gradlew run
+./gradlew run        # JDK 25 подтянется сам, если его нет
 ```
 
 Порт `25565`, либо переменная окружения `PORT`:
@@ -42,7 +42,8 @@ cd minestom
 PORT=25566 ./gradlew run
 ```
 
-Если JitPack не отдаёт `26_3-SNAPSHOT`, соберите Minestom локально:
+Если JitPack не отдаёт `26_3-SNAPSHOT` (в `build.gradle.kts` есть вторая строка
+для координаты `com.github.Minestom:Minestom`), соберите Minestom локально:
 
 ```bash
 git clone -b 26_3 https://github.com/Minestom/Minestom.git
