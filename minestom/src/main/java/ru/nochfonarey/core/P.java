@@ -29,6 +29,10 @@ public final class P {
 
     // прогрессы удержания
     public double feedProg, chargeProg, douseProg, catchProg, rescueProg, takeProg, altarProg;
+    /** Зажигание общей свечи во дворе (секунды удержания). */
+    public double lightProg;
+    /** Откат одиночного действия (F/ПКМ) в секундах раунда. */
+    public double useCd;
 
     // двор
     public int candle = 100;

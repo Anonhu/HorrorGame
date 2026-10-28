@@ -17,7 +17,7 @@ import java.util.List;
 /** Боковая панель и строка над хотбаром: всё, что игрок должен видеть без чата. */
 public final class Hud {
 
-    private static final int LINES = 13;
+    private static final int LINES = 16;
 
     private final Sidebar sidebar;
     private final List<String> cache = new ArrayList<>();
@@ -113,9 +113,19 @@ public final class Hud {
             if (m.voteOpenNow()) {
                 line(i++, "Голосование: " + (int) Math.max(0, m.voteDeadline - m.t) + " с", NamedTextColor.RED);
             }
-            line(i++, "Живых: " + m.aliveCount(), NamedTextColor.GRAY);
-            line(i++, "Забрано: " + m.kills + "/" + m.killToWin, m.kills >= m.killToWin - 1
-                    ? NamedTextColor.RED : NamedTextColor.GRAY);
+            int lit = m.litCandles();
+            line(i++, "Свечи: " + lit + "/" + m.candles.size(), lit == 0 ? NamedTextColor.DARK_RED
+                    : lit == 1 ? NamedTextColor.RED : lit < m.candles.size() / 2 + 1
+                    ? NamedTextColor.GOLD : NamedTextColor.GREEN);
+            line(i++, "Живых: " + m.aliveCount() + " · Забрано: " + m.kills + "/" + m.killToWin,
+                    m.kills >= m.killToWin - 1 ? NamedTextColor.RED : NamedTextColor.GRAY);
+            if (me.lightProg > 0.01) {
+                line(i++, "Зажигаю свечу: " + bars(me.lightProg / InnMode.LIGHT_TIME * 100),
+                        NamedTextColor.GOLD);
+            } else if (!me.impostor && !me.cellared) {
+                line(i++, "Огонёк: " + bars(me.candle), me.candle > 55 ? NamedTextColor.YELLOW
+                        : me.candle > 20 ? NamedTextColor.GOLD : NamedTextColor.RED);
+            }
             line(i++, "", NamedTextColor.GRAY);
             String where = m.roomName(me.roomId);
             line(i++, "Ты: " + where, NamedTextColor.GRAY);
@@ -132,6 +142,14 @@ public final class Hud {
             }
         } else {
             line(i++, "ЖДЁМ", NamedTextColor.GRAY);
+        }
+        // ночные события: что уже случилось и когда ждать следующее
+        if (mode != null && !mode.forecast.isEmpty()) {
+            if (mode.lastNight != null) {
+                line(i++, "Ночь: " + mode.lastNight.title(), NamedTextColor.DARK_PURPLE);
+            }
+            double left = mode.nextNightAt - mode.t;
+            line(i++, "Событие через " + (int) Math.max(0, left) + " с", NamedTextColor.DARK_GRAY);
         }
         blank(i);
 
@@ -160,6 +178,10 @@ public final class Hud {
         }
         if (mode instanceof InnMode m) {
             if (m.voteOpenNow()) return "ПКМ по свече в зале — голосовать";
+            if (m.candleNear(me, 3.0, true) != null) {
+                return "F у подсвечника — зажечь свечу (или держи Shift)";
+            }
+            if (m.dark()) return "В доме темно — F или Shift у подсвечника";
             if (me.impostor) return "Shift рядом с гостем без свидетелей — забрать его";
             return "Ходи, слушай, собирай улики. " + m.stageName();
         }

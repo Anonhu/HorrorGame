@@ -23,6 +23,7 @@ public final class SelfTest {
         lantern();
         relay();
         inn();
+        nights();
         System.out.println();
         if (failures == 0) System.out.println("ИТОГ: все проверки пройдены");
         else System.out.println("ИТОГ: провалено " + failures);
@@ -82,6 +83,132 @@ public final class SelfTest {
         boolean has(String text) {
             for (String s : log) if (s.contains(text)) return true;
             return false;
+        }
+    }
+
+    /** Найти событие пула по id. */
+    static Night.Event ev(Night.Event[] pool, String id) {
+        for (Night.Event e : pool) if (e.id().equals(id)) return e;
+        throw new IllegalStateException("нет события " + id);
+    }
+
+    /**
+     * Ночные события: они обязаны не только писаться в чат, но и менять правила.
+     * Проверяем по одному «жёсткому» эффекту на режим плюс сам ритм ночи.
+     */
+    static void nights() {
+        System.out.println("НОЧНЫЕ СОБЫТИЯ");
+
+        // ── Фонарщики
+        TestHost lh = new TestHost();
+        Room lr = room(ModeType.LANTERN, 5, lh);
+        lr.start();
+        LanternMode lm = (LanternMode) lr.mode;
+        check(lm.forecast.size() == 3, "прогноз на ночь: 3 события");
+        check(lh.has("Ночь обещает: "), "прогноз озвучен в чате");
+
+        boolean fromPool = true;
+        for (Night.Event e : lm.forecast) {
+            boolean in = false;
+            for (Night.Event p2 : Night.LANTERN) if (p2.id().equals(e.id())) in = true;
+            if (!in) fromPool = false;
+        }
+        check(fromPool, "в прогнозе только события этого режима");
+
+        check(!lm.foggy(), "тумана в начале нет");
+        lm.applyNight(ev(Night.LANTERN, "fog"));
+        check(lm.foggy(), "туман включается и ускоряет расход фонаря");
+
+        int mobsBefore = lm.mobs.size();
+        lm.applyNight(ev(Night.LANTERN, "swarm"));
+        check(lm.mobs.size() > mobsBefore, "стая добавляет Тянущихся (" + lm.mobs.size() + ")");
+
+        double fuelBefore = 0;
+        for (LanternMode.Fire f : lm.fires) fuelBefore += f.fuel;
+        lm.applyNight(ev(Night.LANTERN, "wind"));
+        double fuelAfter = 0;
+        for (LanternMode.Fire f : lm.fires) fuelAfter += f.fuel;
+        check(fuelAfter < fuelBefore, "ветер съедает топливо костров");
+
+        // ритм: событие по часам
+        lm.nextNightAt = lm.t + 0.01;
+        int nightsBefore = lm.nights.size();
+        for (int i = 0; i < 8; i++) lr.tick(0.05);
+        check(lm.nights.size() > nightsBefore, "событие срабатывает по часам");
+        check(lm.lastNight != null, "последнее событие запомнено для HUD");
+
+        // ── Эстафета
+        TestHost rh = new TestHost();
+        Room rr = room(ModeType.RELAY, 4, rh);
+        rr.start();
+        RelayMode rm = (RelayMode) rr.mode;
+        rm.lanternCharge = 80;
+        rm.applyNight(ev(Night.RELAY, "storm"));
+        check(rm.lanternCharge < 80, "гроза выжигает заряд фонаря (" + (int) rm.lanternCharge + "%)");
+
+        rm.applyNight(ev(Night.RELAY, "swift"));
+        check(rm.swifter(), "погоня ускоряет Собирателя");
+
+        rm.applyNight(ev(Night.RELAY, "damp"));
+        rm.lanternCharge = 60;
+        double chargeBefore = rm.lanternCharge;
+        for (int i = 0; i < 20; i++) rr.tick(0.05);
+        check(rm.lanternCharge < chargeBefore, "сырость сама съедает заряд");
+
+        // ── Двор
+        TestHost ih = new TestHost();
+        Room ir = room(ModeType.INN, 6, ih);
+        ir.start();
+        InnMode im = (InnMode) ir.mode;
+
+        P guest = null, other = null;
+        for (P p : ir.players.values()) {
+            if (!p.impostor && guest == null) guest = p;
+            else if (!p.impostor) other = p;
+        }
+        guest.candle = 90;
+        im.applyNight(ev(Night.INN, "cold"));
+        check(guest.candle < 90, "холод гасит личные огоньки");
+
+        int cluesBefore = 0;
+        for (P p : ir.players.values()) cluesBefore += p.clues.size();
+        im.applyNight(ev(Night.INN, "creak"));
+        int cluesAfter = 0;
+        for (P p : ir.players.values()) cluesAfter += p.clues.size();
+        check(cluesAfter > cluesBefore, "скрип выдаёт улику");
+
+        int litBefore = im.litCandles();
+        im.applyNight(ev(Night.INN, "draft"));
+        check(im.litCandles() < litBefore, "сквозняк гасит общую свечу ("
+                + im.litCandles() + "/" + im.candles.size() + ")");
+
+        // зажечь свечу обратно: держи действие рядом с потухшей
+        InnMode.Candle burnt = im.candleNear(guest, 100, true);
+        if (burnt != null) {
+            guest.cellared = false;
+            guest.alive = true;
+            guest.x = burnt.x + 0.5;
+            guest.z = burnt.z + 0.5;
+            guest.actUntil = 9e9;
+            int lit = im.litCandles();
+            for (int i = 0; i < 60; i++) ir.tick(0.05);
+            check(im.litCandles() > lit, "свечу можно зажечь заново (Shift у подсвечника)");
+            check(ih.has("зажёг"), "об зажигании сообщают в чат");
+
+            // и то же самое одиночным действием: F / ПКМ рукой
+            im.applyNight(ev(Night.INN, "draft"));
+            InnMode.Candle out = im.candleNear(guest, 100, true);
+            check(out != null, "сквозняк снова оставил потухшую свечу");
+            if (out != null) {
+                guest.x = out.x + 0.5;
+                guest.z = out.z + 0.5;
+                guest.useCd = 0;
+                int before = im.litCandles();
+                ir.act(guest.id, "use", null);
+                check(im.litCandles() > before, "F у свечи зажигает её одним нажатием");
+            }
+        } else {
+            check(false, "после сквозняка есть потухшая свеча");
         }
     }
 
@@ -419,6 +546,7 @@ public final class SelfTest {
         double dt = 0.05;
         boolean locked = false, clue = false, jailed = false;
         int cyclesSeen = 0;
+        int litFrames = 0, litSeen = 0;
 
         for (int i = 0; i < (int) (600 / dt); i++) {
             for (P p : room.players.values()) {
@@ -440,7 +568,18 @@ public final class SelfTest {
                         if (p.dist(victim.x, victim.z) < 1.5) act(p);
                     }
                 } else {
-                    // гости ходят по залу и голосуют
+                    // гость: если рядом потухла общая свеча — сначала свет
+                    InnMode.Candle burnt = m.candleNear(p, 3.0, true);
+                    if (burnt != null) {
+                        move(p, burnt.x + 0.5, burnt.z + 0.5, 3.2, dt);
+                        if (p.dist(burnt.x + 0.5, burnt.z + 0.5) < 2.6) {
+                            act(p);
+                            litSeen++;
+                        }
+                        room.tick(dt);
+                        continue;
+                    }
+                    // иначе — ходят по залу и голосуют
                     double a = (i * dt + p.name.length()) * 0.6;
                     move(p, 22 + Math.cos(a) * 4, 20 + Math.sin(a) * 3, 2.0, dt);
                     if (m.voteOpenNow() && p.vote == null) {
@@ -453,7 +592,9 @@ public final class SelfTest {
                     }
                 }
             }
+            int litBefore = m.litCandles();
             room.tick(dt);
+            if (m.litCandles() > litBefore) litFrames++;
             if (m.lockedRoom != null) locked = true;
             for (P p : room.players.values()) if (!p.clues.isEmpty()) clue = true;
             for (P p : room.players.values()) if (p.cellared) jailed = true;
@@ -465,6 +606,7 @@ public final class SelfTest {
         check(clue, "улики приходят игрокам");
         check(jailed || m.cycle >= 2, "голосование отправляет кого-то в подвал");
         check(cyclesSeen >= 2, "циклы идут: " + cyclesSeen);
+        check(litFrames > 0 || litSeen > 0, "свечи можно зажечь обратно (зажгли: " + litFrames + ")");
         check(host.blocks.containsValue(Keys.WALL), "стены построены");
         check(host.placed.contains(Keys.DOOR_LOCKED), "запертые двери появляются");
 

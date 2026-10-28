@@ -25,6 +25,7 @@ echo
 python3 tools/check_minestom_26_3.py | tail -3
 echo
 python3 tools/check_keys.py
+python3 tools/check_ui.py | tail -3
 echo
 python3 tools/verify_stubs.py | tail -5
 

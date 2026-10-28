@@ -2,11 +2,19 @@ package ru.nochfonarey.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /** Общая часть режима: часы, существа, победитель, итог. */
 public abstract class Mode {
     public final Room room;
     protected final Host host;
+
+    /** Ночные события этого раунда: прогноз, уже случившиеся и следующее по времени. */
+    public final List<Night.Event> forecast = new ArrayList<>();
+    public final List<String> nights = new ArrayList<>();
+    public Night.Event lastNight = null;
+    public double nextNightAt = 0;
+    protected final Random nightRnd = new Random();
 
     public double t = 0;
     public boolean done = false;
@@ -22,6 +30,43 @@ public abstract class Mode {
     public abstract void start();
 
     public abstract void tick(double dt);
+
+    /** Свой набор ночных событий у каждого режима. */
+    protected abstract Night.Event[] nightPool();
+
+    /** Что именно делает событие. Возвращает false, если эффект не сработал. */
+    protected abstract boolean applyNight(Night.Event event);
+
+    /** Прогноз в начале ночи: игроки заранее знают, к чему готовиться. */
+    protected void planNight(int count) {
+        forecast.clear();
+        nights.clear();
+        forecast.addAll(Night.forecast(nightRnd, nightPool(), count));
+        nextNightAt = 35 + nightRnd.nextDouble() * 15;
+        StringBuilder sb = new StringBuilder("Ночь обещает: ");
+        for (int i = 0; i < forecast.size(); i++) {
+            if (i > 0) sb.append(" · ");
+            sb.append(forecast.get(i).title());
+        }
+        chatAll(sb.toString(), Tone.INFO);
+    }
+
+    /** Один тик часов событий. Вызывается режимами из tick(). */
+    protected void nightTick() {
+        if (t < nextNightAt) return;
+        Night.Event e = Night.next(nightRnd, nightPool(), nights);
+        nextNightAt = t + Night.gap(nightRnd);
+        lastNight = e;
+        try {
+            // эффект может не сработать (некого пугать) — сообщение всё равно
+            // уходит, чтобы ритм ночи не ломался
+            applyNight(e);
+        } catch (RuntimeException ex) {
+            // одно кривое событие не должно убивать раунд
+            System.err.println("[night " + e.id() + "] " + ex);
+        }
+        chatAll(e.title() + ". " + e.text() + ".", Tone.DARK);
+    }
 
     /** Разовая команда игрока: action = "vote" | "shout" | "pass" | ... */
     public void act(P p, String action, String target) {

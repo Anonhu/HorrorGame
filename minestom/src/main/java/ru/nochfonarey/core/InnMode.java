@@ -18,6 +18,10 @@ public final class InnMode extends Mode {
     public static final int CYCLES = 5;
     public static final double CYCLE_TIME = 75, VOTE_TIME = 18, FINAL_VOTE = 30;
     public static final double TAKE_TIME = 4.0, TAKE_RANGE = 2.2, ALONE = 7.0;
+    /** Сколько секунд держать действие у потухшей свечи, чтобы зажечь её. */
+    public static final double LIGHT_TIME = 1.4;
+    /** Насколько быстро общая свеча восстанавливает личный огонёк гостя. */
+    public static final double WARM_RATE = 16;
     public static final int GROUND_Y = 64, CEIL = 4;
     public static final int X0 = 3, Z0 = 3, X1 = 40, Z1 = 34;
 
@@ -96,6 +100,7 @@ public final class InnMode extends Mode {
     public final List<double[]> bodies = new ArrayList<>();
     private final Random rnd = new Random();
     public String summaryText = "";
+    private boolean darkAnnounced = false;
 
     public InnMode(Room room) {
         super(room);
@@ -108,6 +113,7 @@ public final class InnMode extends Mode {
         definePlan();
         buildHouse();
         placeSpawns();
+        planNight(3);
 
         int n = room.players.size();
         killToWin = Math.max(2, n / 2 - 1);
@@ -308,6 +314,8 @@ public final class InnMode extends Mode {
             p.candle = (int) Math.max(0, p.candle - dt * 0.22);
         }
 
+        nightTick();
+        updateCandles(dt);
         updateKills(dt);
         updateCycle();
 
@@ -319,6 +327,126 @@ public final class InnMode extends Mode {
     public Rect roomAt(double x, double z) {
         for (Rect r : rooms) if (r.inside(x, z)) return r;
         return null;
+    }
+
+    /* ---------------- свечи ---------------- */
+
+    public int litCandles() {
+        int n = 0;
+        for (Candle c : candles) if (c.lit) n++;
+        return n;
+    }
+
+    /** В доме темно: все общие свечи погасли. */
+    public boolean dark() {
+        return litCandles() == 0;
+    }
+
+    /** Сколько держится «не гость», когда свет в доме погас. */
+    public double takeTime() {
+        return dark() ? TAKE_TIME * 0.6 : TAKE_TIME;
+    }
+
+    public Candle candleNear(P p, double range, boolean unlitOnly) {
+        for (Candle c : candles) {
+            if (unlitOnly && c.lit) continue;
+            if (p.dist(c.x + 0.5, c.z + 0.5) < range) return c;
+        }
+        return null;
+    }
+
+    private void updateCandles(double dt) {
+        if (dark() && !darkAnnounced) {
+            darkAnnounced = true;
+            chatAll("В доме не осталось света. Гости слепнут, «не гость» — нет.", Tone.DARK);
+            for (P p : alive()) {
+                host.title(p, "ТЕМНОТА", "зажгите свечу: F или Shift");
+                host.sound(p, "minecraft:entity.warden.heartbeat", 1.2f, 0.5f);
+            }
+        } else if (!dark()) {
+            darkAnnounced = false;
+        }
+
+        for (P p : room.players.values()) {
+            if (!p.alive || p.cellared) {
+                p.lightProg = 0;
+                continue;
+            }
+            Candle burnt = candleNear(p, 3.0, true);
+            Candle lit = candleNear(p, 3.0, false);
+            if (burnt != null) {
+                // зажигаем общую свечу: держи действие (ПКМ или Shift) рядом с ней
+                if (p.acting(t)) {
+                    p.lightProg += dt;
+                    host.particle("minecraft:flame", burnt.x + 0.5, GROUND_Y + 1.3, burnt.z + 0.5, 2, 0.2);
+                    if (p.lightProg >= LIGHT_TIME) {
+                        p.lightProg = 0;
+                        relight(burnt, p);
+                    }
+                } else {
+                    p.lightProg = Math.max(0, p.lightProg - dt * 2);
+                }
+                continue;
+            }
+            p.lightProg = 0;
+            if (lit != null) {
+                // у живой свечи личный огонёк восстанавливается
+                p.candle = (int) Math.min(100, p.candle + WARM_RATE * dt);
+            }
+        }
+    }
+
+    private void relight(Candle c, P by) {
+        c.lit = true;
+        host.block(c.x, GROUND_Y + 1, c.z, Keys.CANDLE_ON);
+        host.light(c.x, GROUND_Y + 2, c.z, 13);
+        host.sound(by, "minecraft:item.flintandsteel.use", 1f, 0.9f);
+        host.soundAt(c.x, c.z, "minecraft:block.candle.place", 1.2f, 1f);
+        chatAll(by.name + " зажёг(ла) свечу. Света: " + litCandles() + "/" + candles.size() + ".", Tone.GOOD);
+        by.ignites++;
+    }
+
+    @Override
+    protected Night.Event[] nightPool() {
+        return Night.INN;
+    }
+
+    @Override
+    protected boolean applyNight(Night.Event e) {
+        switch (e.id()) {
+            case "cold" -> {
+                int n = 0;
+                for (P p : room.players.values()) {
+                    if (!p.alive || p.impostor) continue;
+                    p.candle = Math.max(0, p.candle - 25);
+                    n++;
+                }
+                return n > 0;
+            }
+            case "creak" -> {
+                List<P> guests = new ArrayList<>();
+                for (P p : alive()) if (!p.impostor) guests.add(p);
+                if (guests.isEmpty()) return false;
+                P lucky = guests.get(rnd.nextInt(guests.size()));
+                clue(lucky);
+                return true;
+            }
+            case "draft" -> {
+                List<Candle> lit = new ArrayList<>();
+                for (Candle c : candles) if (c.lit) lit.add(c);
+                if (lit.size() <= 1) return false;
+                Candle c = lit.get(rnd.nextInt(lit.size()));
+                c.lit = false;
+                host.block(c.x, GROUND_Y + 1, c.z, Keys.CANDLE_OFF);
+                host.light(c.x, GROUND_Y + 2, c.z, 0);
+                host.particle("minecraft:smoke", c.x + 0.5, GROUND_Y + 1.2, c.z + 0.5, 12, 0.4);
+                chatAll("Сквозняк задул свечу. Света: " + litCandles() + "/" + candles.size() + ".", Tone.WARN);
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
     }
 
     private void updateKills(double dt) {
@@ -339,19 +467,23 @@ public final class InnMode extends Mode {
                 p.takeProg = 0;
                 continue;
             }
+            // в темноте свидетели плохо видят: если у гостя погас личный огонёк
+            // или в доме не осталось свечей, спасти может только тот, кто стоит
+            // совсем рядом
+            double witnessRange = (dark() || victim.candle <= 0) ? ALONE * 0.45 : ALONE;
             boolean witness = false;
             for (P q : alive()) {
                 if (q.id.equals(p.id) || q.id.equals(victim.id)) continue;
-                if (p.dist(q.x, q.z) < ALONE) witness = true;
+                if (p.dist(q.x, q.z) < witnessRange) witness = true;
             }
             if (witness) {
                 p.takeProg = Math.max(0, p.takeProg - dt);
-                chat(p, "Свидетели рядом", Tone.WARN);
+                chat(p, "Свидетели рядом. В темноте они не помогут.", Tone.WARN);
                 continue;
             }
             p.takeProg += dt;
             host.particle("minecraft:crit", victim.x, GROUND_Y + 1, victim.z, 2, 0.3);
-            if (p.takeProg >= TAKE_TIME) {
+            if (p.takeProg >= takeTime()) {
                 p.takeProg = 0;
                 p.kills++;
                 kills++;
@@ -408,34 +540,37 @@ public final class InnMode extends Mode {
     }
 
     private void giveClues() {
+        for (P p : alive()) clue(p);
+    }
+
+    /** Одна улика конкретному игроку: иногда правда, иногда слух (так и задумано). */
+    private void clue(P p) {
         List<P> alive = alive();
-        for (P p : alive) {
-            P other = null;
-            if (alive.size() > 1) {
-                do {
-                    other = alive.get(rnd.nextInt(alive.size()));
-                } while (other.id.equals(p.id));
-            }
-            boolean real = rnd.nextDouble() < 0.55 && other != null;
-            String text;
-            if (real) {
-                Rect r = roomAt(other.x, other.z);
-                text = other.name + " был(а) в «" + (r == null ? "коридоре" : r.name) + "» в начале цикла.";
-            } else {
-                Rect r = rooms.get(rnd.nextInt(rooms.size()));
-                String[] fake = {
-                        "В «" + r.name + "» пахло гарью от чужой свечи.",
-                        "Дверь в «" + r.name + "» скрипела, когда кто-то проходил.",
-                        "На полу в «" + r.name + "» остался пепел. Свеча гасла не сама.",
-                        "Кто-то стоял слишком близко к темноте у «" + r.name + "».",
-                };
-                text = fake[rnd.nextInt(fake.length)];
-            }
-            if (p.clues.size() > 12) p.clues.remove(0);
-            p.clues.add(text);
-            host.chat(p, "Улика: " + text, Tone.INFO);
-            host.sound(p, "minecraft:item.book.page_turn", 0.7f, 1f);
+        P other = null;
+        if (alive.size() > 1) {
+            do {
+                other = alive.get(rnd.nextInt(alive.size()));
+            } while (other.id.equals(p.id));
         }
+        boolean real = rnd.nextDouble() < 0.55 && other != null;
+        String text;
+        if (real) {
+            Rect r = roomAt(other.x, other.z);
+            text = other.name + " был(а) в «" + (r == null ? "коридоре" : r.name) + "» в начале цикла.";
+        } else {
+            Rect r = rooms.get(rnd.nextInt(rooms.size()));
+            String[] fake = {
+                    "В «" + r.name + "» пахло гарью от чужой свечи.",
+                    "Дверь в «" + r.name + "» скрипела, когда кто-то проходил.",
+                    "На полу в «" + r.name + "» остался пепел. Свеча гасла не сама.",
+                    "Кто-то стоял слишком близко к темноте у «" + r.name + "».",
+            };
+            text = fake[rnd.nextInt(fake.length)];
+        }
+        if (p.clues.size() > 12) p.clues.remove(0);
+        p.clues.add(text);
+        host.chat(p, "Улика: " + text, Tone.INFO);
+        host.sound(p, "minecraft:item.book.page_turn", 0.7f, 1f);
     }
 
     private void resolveCycleVote() {
@@ -572,6 +707,10 @@ public final class InnMode extends Mode {
 
     @Override
     public void act(P p, String action, String target) {
+        if ("use".equals(action) || "shout".equals(action)) {
+            useCandle(p);
+            return;
+        }
         if ("vote".equals(action) && voteOpen && !finalStage) {
             P t2 = room.byId(target);
             if (t2 == null || !t2.alive || t2.id.equals(p.id)) return;
@@ -587,6 +726,39 @@ public final class InnMode extends Mode {
             p.vote = target;
             chat(p, "Голос за " + t2.name, Tone.INFO);
             host.sound(p, "minecraft:ui.button.click", 0.8f, 1.2f);
+        }
+    }
+
+    /**
+     * Одиночное действие у свечи (F или ПКМ). Так «свеча работает» даже у того,
+     * кто не догадался держать Shift: одно нажатие рядом с потухшей свечой —
+     * и она снова горит. У живой свечи действие греет личный огонёк.
+     */
+    private void useCandle(P p) {
+        if (!p.alive || p.cellared) return;
+        if (p.useCd > t) {
+            chat(p, "Руки заняты — подожди секунду.", Tone.INFO);
+            return;
+        }
+        Candle burnt = candleNear(p, 3.0, true);
+        if (burnt != null) {
+            p.useCd = t + 1.5;
+            p.lightProg = 0;
+            relight(burnt, p);
+            return;
+        }
+        Candle lit = candleNear(p, 3.0, false);
+        if (lit != null) {
+            p.useCd = t + 1.5;
+            p.candle = Math.min(100, p.candle + 18);
+            host.particle("minecraft:flame", lit.x + 0.5, GROUND_Y + 1.2, lit.z + 0.5, 4, 0.25);
+            host.sound(p, "minecraft:block.candle.fizz", 0.6f, 1.3f);
+            chat(p, "Огонёк греет: " + (int) p.candle + "%", Tone.INFO);
+            return;
+        }
+        if (p.impostor) {
+            p.useCd = t + 1;
+            chat(p, "Ты принюхиваешься. Слишком много света.", Tone.DARK);
         }
     }
 

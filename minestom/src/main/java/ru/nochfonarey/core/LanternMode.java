@@ -63,6 +63,12 @@ public final class LanternMode extends Mode {
     public double voteDeadline = 0;
     public String lastShadowId = null;
     public double nextShadowAt = SHADOW_EVERY;
+    /** Туман: пока t < fogUntil, фонарь садится быстрее. */
+    public double fogUntil = 0;
+
+    public boolean foggy() {
+        return t < fogUntil;
+    }
     private final Random rnd = new Random();
 
     public LanternMode(Room room) {
@@ -74,9 +80,13 @@ public final class LanternMode extends Mode {
     @Override
     public void start() {
         for (int i = 0; i < FIRES.length; i++) fires.add(new Fire(i, FIRES[i][0], FIRES[i][1]));
-        for (double[] p : PILES) piles.add(new Pile(p[0], p[1]));
+        // кучки дров каждый раунд стоят чуть иначе — искать их заново интереснее
+        for (double[] p : PILES) {
+            piles.add(new Pile(p[0] + rnd.nextInt(3) - 1, p[1] + rnd.nextInt(3) - 1));
+        }
 
         buildArena();
+        planNight(3);
         placeSpawns();
         for (P p : room.players.values()) {
             p.charge = 100;
@@ -148,6 +158,7 @@ public final class LanternMode extends Mode {
     public void tick(double dt) {
         t += dt;
 
+        nightTick();
         updateFires(dt);
         updatePiles(dt);
         updatePlayers(dt);
@@ -262,7 +273,8 @@ public final class LanternMode extends Mode {
 
             // расход заряда
             if (p.lanternOn && p.charge > 0) {
-                p.charge = Math.max(0, p.charge - DRAIN * dt);
+                double drain = DRAIN * (foggy() ? 2.0 : 1.0);
+                p.charge = Math.max(0, p.charge - drain * dt);
                 if (p.charge <= 0) {
                     p.lanternOn = false;
                     chat(p, "Фонарь погас. Зарядите у костра.", Tone.WARN);
@@ -288,6 +300,69 @@ public final class LanternMode extends Mode {
                 }
             } else {
                 p.douseProg = Math.max(0, p.douseProg - dt * 1.5);
+            }
+        }
+    }
+
+    /* ---------------- ночные события ---------------- */
+
+    @Override
+    protected Night.Event[] nightPool() {
+        return Night.LANTERN;
+    }
+
+    @Override
+    protected boolean applyNight(Night.Event e) {
+        switch (e.id()) {
+            case "wind" -> {
+                List<Fire> lit = new ArrayList<>();
+                for (Fire f : fires) if (f.lit) lit.add(f);
+                if (lit.isEmpty()) return false;
+                Fire f = lit.get(rnd.nextInt(lit.size()));
+                f.fuel = Math.max(0, f.fuel - 30);
+                host.particle("minecraft:large_smoke", f.x, GROUND_Y + 1.2, f.z, 24, 1.0);
+                host.soundAt(f.x, f.z, "minecraft:item.elytra.flying", 1.2f, 0.7f);
+                chatAll("Ветер вцепился в костёр №" + (f.id + 1) + ".", Tone.WARN);
+                return true;
+            }
+            case "fog" -> {
+                fogUntil = t + 30;
+                for (P p : alive()) host.title(p, "ТУМАН", "фонарь садится вдвое быстрее");
+                return true;
+            }
+            case "whisper" -> {
+                P s = shadowPlayer();
+                if (s == null) {
+                    chatAll("Шёпот: сейчас Тень спит. Это ненадолго.", Tone.INFO);
+                    return false;
+                }
+                Fire near = fires.get(0);
+                double best = 1e9;
+                for (Fire f : fires) {
+                    double d = dist(s.x, s.z, f.x, f.z);
+                    if (d < best) {
+                        best = d;
+                        near = f;
+                    }
+                }
+                chatAll("Шёпот: Тень у костра №" + (near.id + 1) + ".", Tone.DARK);
+                return true;
+            }
+            case "swarm" -> {
+                Fire f = fires.get(rnd.nextInt(fires.size()));
+                for (int i = 0; i < 2; i++) {
+                    double a = rnd.nextDouble() * Math.PI * 2;
+                    double x = clamp(f.x + Math.cos(a) * 4.5, 3, 69);
+                    double z = clamp(f.z + Math.sin(a) * 4.5, 3, 69);
+                    mobs.add(new Mob("n" + mobs.size(), "minecraft:husk", x, z));
+                    host.block((int) x, GROUND_Y, (int) z, Keys.GRABBER);
+                }
+                chatAll("Земля под костром №" + (f.id + 1) + " вспухла.", Tone.WARN);
+                host.soundAt(f.x, f.z, "minecraft:entity.warden.heartbeat", 1.2f, 0.6f);
+                return true;
+            }
+            default -> {
+                return false;
             }
         }
     }

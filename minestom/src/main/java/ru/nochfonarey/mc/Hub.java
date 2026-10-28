@@ -55,6 +55,10 @@ public final class Hub {
     private final Map<UUID, String[]> voteSlots = new HashMap<>();
     private final Set<String> wasDead = new HashSet<>();
     private final Set<String> announced = new HashSet<>();
+    /** Кому уже показали меню режимов после входа в лобби. */
+    private final Set<UUID> menuOffered = new HashSet<>();
+    private final java.util.concurrent.CopyOnWriteArrayList<Runnable> deferred =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
     private long ticks = 0;
 
     public Hub() {
@@ -312,12 +316,18 @@ public final class Hub {
         };
     }
 
+    /**
+     * Инвентарь лобби: один предмет и ноль загадок.
+     *
+     * <p>Раньше в слотах 4–6 лежали предметы трёх режимов — человек видел
+     * в инвентаре «чужие» вещи и не понимал, что нажимать. Теперь в руках
+     * ровно один компас «Меню режимов»: ПКМ или F открывают меню, а пункты
+     * меню уже создают комнату.
+     */
     public static void giveLobbyKit(Player player) {
         player.getInventory().clear();
         player.getInventory().setItemStack(0, Items.compass());
-        player.getInventory().setItemStack(4, Items.menuLantern());
-        player.getInventory().setItemStack(5, Items.menuRelay());
-        player.getInventory().setItemStack(6, Items.menuInn());
+        player.refreshHeldSlot((byte) 0);
     }
 
     /* ---------------- клики и голосование ---------------- */
@@ -347,10 +357,27 @@ public final class Hub {
 
     /* ---------------- тик ---------------- */
 
+    /** Отложить действие до ближайшего тика (безопасно для инвентарей и телепортов). */
+    public void defer(Runnable action) {
+        deferred.add(action);
+    }
+
     public void tick() {
         ticks++;
+        if (!deferred.isEmpty()) {
+            List<Runnable> now = new ArrayList<>(deferred);
+            deferred.clear();
+            for (Runnable r : now) {
+                try {
+                    r.run();
+                } catch (RuntimeException e) {
+                    System.err.println("[defer] " + e);
+                }
+            }
+        }
         Ambience.lobby(lobbyWatchers(), ticks);
         guard();
+        offerMenu();
         autoResetEnded();
         NetHost.sweepRetired();
         for (GameServer gs : new ArrayList<>(servers)) {
@@ -381,6 +408,30 @@ public final class Hub {
             gs.rooms.removeIf(r -> r.players.isEmpty());
         }
         servers.removeIf(s -> s.rooms.isEmpty());
+    }
+
+    /**
+     * Меню режимов показывается само при входе в лобби — один раз на игрока.
+     *
+     * <p>Так «предмет меню не работает» перестаёт быть проблемой: даже если
+     * игрок не догадается нажать ПКМ, он всё равно увидит три режима и сможет
+     * выбрать. Повторно меню открывается компасом, клавишей F и командой
+     * {@code /h menu}.
+     */
+    private void offerMenu() {
+        for (Player pl : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+            if (pl.getInstance() != lobby) {
+                menuOffered.remove(pl.getUuid());
+                continue;
+            }
+            if (pl.getOpenInventory() != null) {
+                menuOffered.add(pl.getUuid());
+                continue;
+            }
+            if (menuOffered.add(pl.getUuid())) {
+                Interact.openMenu(this, pl);
+            }
+        }
     }
 
     /**

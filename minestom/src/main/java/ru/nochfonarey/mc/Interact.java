@@ -135,11 +135,9 @@ public final class Interact {
     private static void handleClick(Hub hub, Player player) {
         Room room = hub.roomOf(player);
         if (room == null) {
-            int slot = player.getHeldSlot();
-            if (slot == 4) hub.create(ru.nochfonarey.core.ModeType.LANTERN, player);
-            else if (slot == 5) hub.create(ru.nochfonarey.core.ModeType.RELAY, player);
-            else if (slot == 6) hub.create(ru.nochfonarey.core.ModeType.INN, player);
-            else openMenu(hub, player);
+            // в лобби нет «слот-игр»: клик всегда открывает меню, а игру
+            // выбирают кликом по пункту меню
+            if (player.getOpenInventory() == null) openMenu(hub, player);
             return;
         }
         hub.press(player);
@@ -151,6 +149,7 @@ public final class Interact {
     /* ---------------- меню режимов ---------------- */
 
     public static void openMenu(Hub hub, Player player) {
+        if (hub.roomOf(player) != null) return;
         Inventory inv = new Inventory(InventoryType.CHEST_1_ROW,
                 Component.text("ХЭЛЛОУИН · выбери режим", NamedTextColor.DARK_PURPLE));
         inv.setItemStack(2, Items.menuLantern());
@@ -165,13 +164,20 @@ public final class Interact {
     }
 
     private static void menuClick(Hub hub, Player player, int slot) {
-        switch (slot) {
-            case 2 -> hub.create(ru.nochfonarey.core.ModeType.LANTERN, player);
-            case 4 -> hub.create(ru.nochfonarey.core.ModeType.RELAY, player);
-            case 6 -> hub.create(ru.nochfonarey.core.ModeType.INN, player);
-            default -> {
-            }
-        }
+        ru.nochfonarey.core.ModeType type = switch (slot) {
+            case 2 -> ru.nochfonarey.core.ModeType.LANTERN;
+            case 4 -> ru.nochfonarey.core.ModeType.RELAY;
+            case 6 -> ru.nochfonarey.core.ModeType.INN;
+            default -> null;
+        };
+        if (type == null) return;
+        // клик обрабатывается внутри InventoryPreClickEvent: закрывать окно и
+        // создавать комнату прямо там — значит ломать ресинк окна на клиенте.
+        // Откладываем на ближайший тик.
+        hub.defer(() -> {
+            player.closeInventory();
+            hub.create(type, player);
+        });
     }
 
     /* ---------------- голосование ---------------- */
@@ -222,7 +228,7 @@ public final class Interact {
         player.sendMessage(Component.text("  ХЭЛЛОУИН · ТРИ НОЧИ", NamedTextColor.DARK_RED));
         player.sendMessage(Component.text("  /h create lantern | relay | inn  — собрать комнату", NamedTextColor.GRAY));
         player.sendMessage(Component.text("  /h join КОД — зайти к друзьям   /h start — начать", NamedTextColor.GRAY));
-        player.sendMessage(Component.text("  ПКМ по предмету в слоте 4-6 тоже создаёт комнату", NamedTextColor.DARK_GRAY));
+        player.sendMessage(Component.text("  В руках компас «Меню режимов»: ПКМ или F — открыть меню", NamedTextColor.DARK_GRAY));
         player.sendMessage(Component.text("  PS1-шейдеры: /shaders/ps1-full.zip на порту раздачи пака", NamedTextColor.DARK_GRAY));
         player.sendMessage(Component.text(""));
     }

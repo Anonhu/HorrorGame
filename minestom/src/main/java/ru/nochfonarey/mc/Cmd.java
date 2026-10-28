@@ -22,6 +22,15 @@ public final class Cmd extends Command {
 
         addSyntax((sender, context) -> {
             Player player = (Player) sender;
+            if (hub.roomOf(player) != null) {
+                player.sendMessage(Component.text("Ты уже в комнате: /h code, /h start", NamedTextColor.GRAY));
+                return;
+            }
+            Interact.openMenu(hub, player);
+        }, ArgumentType.Literal("menu"));
+
+        addSyntax((sender, context) -> {
+            Player player = (Player) sender;
             String raw = context.get("mode");
             ModeType type = ModeType.parse(raw);
             if (type == null) {
@@ -117,6 +126,7 @@ public final class Cmd extends Command {
 
     private static void help(Player player) {
         player.sendMessage(Component.text(" ХЭЛЛОУИН · команды", NamedTextColor.DARK_RED));
+        player.sendMessage(Component.text("/h menu — меню режимов (можно ПКМ компасом или F)", NamedTextColor.GRAY));
         player.sendMessage(Component.text("/h create lantern|relay|inn — новая комната", NamedTextColor.GRAY));
         player.sendMessage(Component.text("/h join КОД — зайти в комнату", NamedTextColor.GRAY));
         player.sendMessage(Component.text("/h start — начать (хозяин)", NamedTextColor.GRAY));

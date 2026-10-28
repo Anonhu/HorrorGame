@@ -23,6 +23,8 @@ public class Player extends Entity {
     public PlayerInventory getInventory() { return null; }
     public byte getHeldSlot() { return 0; }
     public boolean openInventory(Inventory inventory) { return true; }
+    public net.minestom.server.inventory.AbstractInventory getOpenInventory() { return null; }
+    public void refreshHeldSlot(byte slot) { }
     public void closeInventory() { }
     public void setRespawnPoint(Pos pos) { }
     public Pos getRespawnPoint() { return null; }

@@ -47,6 +47,19 @@ public final class RelayMode extends Mode {
     public String sacrifice = null;
     public String reason = null;
     public double altarProg = 0;
+    /** «Погоня»: пока t < swiftUntil, Собиратель быстрее. */
+    public double swiftUntil = 0;
+    /** «Сырость»: заряд фонаря тает сам, пока t < dampUntil. */
+    public double dampUntil = 0;
+
+    public boolean swifter() {
+        return t < swiftUntil;
+    }
+
+    public boolean damp() {
+        return t < dampUntil;
+    }
+
 
     public RelayMode(Room room) {
         super(room);
@@ -55,6 +68,7 @@ public final class RelayMode extends Mode {
     @Override
     public void start() {
         buildArena();
+        planNight(3);
 
         List<P> list = new ArrayList<>(room.players.values());
         for (int i = 0; i < list.size(); i++) {
@@ -75,6 +89,43 @@ public final class RelayMode extends Mode {
 
         chatAll("Один фонарь на всех. Донесите его до часовни.", Tone.INFO);
         chatAll("ПКМ — зарядить у костра или разбить у алтаря. Q — передать фонарь. F — крик.", Tone.INFO);
+    }
+
+    /* ---------------- ночные события ---------------- */
+
+    @Override
+    protected Night.Event[] nightPool() {
+        return Night.RELAY;
+    }
+
+    @Override
+    protected boolean applyNight(Night.Event e) {
+        switch (e.id()) {
+            case "storm" -> {
+                lanternCharge = Math.max(5, lanternCharge - 25);
+                P c = carrier();
+                if (c != null) {
+                    host.title(c, "ГРОЗА", "фонарь выпило молнией");
+                    host.sound(c, "minecraft:entity.lightning_bolt.thunder", 1f, 0.9f);
+                }
+                return true;
+            }
+            case "swift" -> {
+                swiftUntil = t + 30;
+                for (P p : alive()) host.title(p, "ПОГОНЯ", "Собиратель стал быстрее");
+                host.soundAt(collector == null ? 0 : collector.x, collector == null ? 0 : collector.z,
+                        "minecraft:entity.warden.roar", 1.2f, 0.7f);
+                return true;
+            }
+            case "damp" -> {
+                dampUntil = t + 25;
+                for (P p : alive()) host.title(p, "СЫРОСТЬ", "фонарь тает сам");
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
     }
 
     private void buildArena() {
@@ -149,6 +200,14 @@ public final class RelayMode extends Mode {
     @Override
     public void tick(double dt) {
         t += dt;
+        nightTick();
+        if (damp() && lanternCharge > 0) {
+            lanternCharge = Math.max(0, lanternCharge - 0.8 * dt);
+            if (lanternCharge <= 0 && carrierId != null) {
+                P c = carrier();
+                if (c != null) dropLantern(c.x, c.z);
+            }
+        }
         updateCarrier(dt);
         updateLoserLantern(dt);
         updateCollector(dt);
@@ -298,7 +357,7 @@ public final class RelayMode extends Mode {
             chase = false;
         }
 
-        double speed = (chase ? COLLECTOR_CHASE : COLLECTOR_SPEED) * dt;
+        double speed = (chase ? COLLECTOR_CHASE : COLLECTOR_SPEED) * (swifter() ? 1.55 : 1.0) * dt;
         double dx = tx - collector.x, dz = tz - collector.z;
         double len = Math.sqrt(dx * dx + dz * dz);
         if (len > 0.05) {
