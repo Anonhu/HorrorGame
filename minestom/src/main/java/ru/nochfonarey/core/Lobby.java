@@ -14,7 +14,9 @@ package ru.nochfonarey.core;
  *       с висящими фонарями;</li>
  *   <li>три арки-входа в режимы: Фонарщики (север), Эстафета (юго-восток),
  *       Двор (юго-запад), у каждой своя подсветка и свои вещи;</li>
- *   <li>по краю — палый лес: бледные дубы, тыквы, паутина, черепа на кольях.</li>
+ *   <li>по краю — палый лес: бледные дубы, тыквы, паутина, черепа на кольях;</li>
+ *   <li>вокруг — <b>пустота</b>: площадь висит в чёрном мире, а по кромке стоит
+ *       невидимая стена {@link Keys#BARRIER}, чтобы с неё нельзя было сойти.</li>
  * </ul>
  */
 public final class Lobby {
@@ -25,12 +27,19 @@ public final class Lobby {
     /** Где появляется игрок (x, z) и куда он смотрит. */
     public static final double SPAWN_X = 20.5, SPAWN_Z = 32.5;
     public static final float SPAWN_YAW = 180f;
+    /** Радиус невидимой стены: дальше площадь кончается и начинается пустота. */
+    public static final double WALL_R = 25.0;
+    /** Толщина стены: два блока, иначе на диагоналях остаются щели шириной в палец. */
+    public static final double WALL_T = 2.4;
+    /** Высота стены над полом. */
+    public static final int WALL_H = 7;
 
     private Lobby() {
     }
 
     public static void build(Blueprint w) {
         ground(w);
+        wall(w);
         pyre(w);
         gate(w, 20, 4, Kind.LANTERN);
         gate(w, 35, 30, Kind.RELAY);
@@ -56,10 +65,33 @@ public final class Lobby {
                     w.put(x, FLOOR, z, bare ? Keys.PATH : Keys.GRASS_BLOCK);
                 }
                 if (onPath(x, z)) w.put(x, FLOOR, z, Keys.PATH);
+                // остров: под площадкой два слоя камня, иначе она висит бумажным листом
+                w.put(x, FLOOR - 1, z, Keys.STONE);
+                if (r <= 24) w.put(x, FLOOR - 2, z, Keys.DIRT);
+                if (r <= 18) w.put(x, FLOOR - 3, z, Keys.STONE);
                 // над полом — воздух, иначе на траве остаются кусты генератора
                 if (r <= 16.2) {
                     w.clear(x, FLOOR + 1, z);
                     w.clear(x, FLOOR + 2, z);
+                }
+            }
+        }
+    }
+
+    /**
+     * Невидимая стена по кромке: с площади нельзя сойти в пустоту.
+     *
+     * <p>Кольцо толщиной {@link #WALL_T}: одного блока не хватает — на диагоналях
+     * между ступенчатыми блоками остаются щели, в которые проходит игрок.
+     */
+    private static void wall(Blueprint w) {
+        for (int x = CX - 30; x <= CX + 30; x++) {
+            for (int z = CZ - 30; z <= CZ + 30; z++) {
+                // радиус по центру блока: кольцо получается сплошным
+                double r = Math.hypot(x + 0.5 - CX, z + 0.5 - CZ);
+                if (r < WALL_R || r > WALL_R + WALL_T) continue;
+                for (int y = FLOOR + 1; y <= FLOOR + WALL_H; y++) {
+                    w.put(x, y, z, Keys.BARRIER);
                 }
             }
         }

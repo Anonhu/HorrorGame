@@ -7,6 +7,9 @@ package net.minestom.server.instance.block;
  */
 public interface Block {
     Block AIR = null;
+
+    boolean air();
+
     Block COARSE_DIRT = null;
     Block DARK_OAK_LOG = null;
     Block DARK_OAK_PLANKS = null;

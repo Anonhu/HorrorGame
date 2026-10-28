@@ -70,4 +70,6 @@ public interface Keys {
     String GRASS_BLOCK = "grass_block";
     String WOOL_RED = "wool_red";
     String SEA_LANTERN = "sea_lantern";
+    /** Невидимая стена: лобби и комнаты ожидания не выпускают в пустоту. */
+    String BARRIER = "barrier";
 }

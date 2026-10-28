@@ -39,12 +39,27 @@ public final class Interact {
         });
 
         events.addListener(PlayerSpawnEvent.class, event -> {
-            if (!event.isFirstSpawn()) return;
             Player player = event.getPlayer();
-            player.setGameMode(net.minestom.server.entity.GameMode.ADVENTURE);
+            boolean lobby = player.getInstance() == hub.lobby();
+            if (!event.isFirstSpawn()) {
+                // вернулся после смерти: на площади — лобби-набор, в комнате — как было
+                if (lobby) {
+                    Hub.prepare(player, net.minestom.server.entity.GameMode.ADVENTURE);
+                    Hub.giveLobbyKit(player);
+                    player.setRespawnPoint(Hub.LOBBY);
+                }
+                return;
+            }
+            Hub.prepare(player, net.minestom.server.entity.GameMode.ADVENTURE);
             Hub.giveLobbyKit(player);
+            player.setRespawnPoint(Hub.LOBBY);
             sendPack(hub, player);
             greet(player);
+        });
+
+        events.addListener(net.minestom.server.event.player.PlayerRespawnEvent.class, event -> {
+            Player player = event.getPlayer();
+            if (player.getInstance() == hub.lobby()) event.setRespawnPosition(Hub.LOBBY);
         });
 
         events.addListener(PlayerResourcePackStatusEvent.class, event ->

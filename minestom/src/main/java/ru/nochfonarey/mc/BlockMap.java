@@ -89,6 +89,7 @@ public final class BlockMap {
         put(Keys.GRASS_BLOCK, "minecraft:grass_block");
         put(Keys.WOOL_RED, "minecraft:red_wool");
         put(Keys.SEA_LANTERN, "minecraft:sea_lantern");
+        put(Keys.BARRIER, "minecraft:barrier");
     }
 
     private BlockMap() {
@@ -107,7 +108,14 @@ public final class BlockMap {
         if (id == null) {
             id = key.startsWith("minecraft:") ? key : "minecraft:" + key;
         }
-        Block block = Block.fromKey(id);
+        Block block;
+        try {
+            block = Block.fromKey(id);
+        } catch (RuntimeException e) {
+            // блок переименовали или его нет в этой версии — раунд не должен падать
+            System.out.println("[block] нет блока " + id + " (ключ " + key + "), ставлю камень");
+            block = null;
+        }
         if (block == null) return Block.STONE;
         String[] props = PROPS.get(key);
         if (props != null) {

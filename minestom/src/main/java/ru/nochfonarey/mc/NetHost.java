@@ -19,8 +19,10 @@ import ru.nochfonarey.core.Room;
 import ru.nochfonarey.core.Tone;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Мост между ядром и Minecraft: блоки, звуки, частицы, свет, титулы, телепорты. */
@@ -33,6 +35,8 @@ public final class NetHost implements Host {
     private InstanceContainer world;
     private final Map<String, Player> players = new HashMap<>();
     private final Map<String, BlockVec> followLights = new HashMap<>();
+    /** Миры, которые уже не нужны: убираются, как только из них выйдут все. */
+    private static final List<InstanceContainer> RETIRED = new ArrayList<>();
 
     /** Куда ставить «живой» свет (фонарь в руке). */
     public int followY = 67;
@@ -92,16 +96,70 @@ public final class NetHost implements Host {
         }
     }
 
-    /** Новый чистый мир: старый раунд не оставляет горящих костров на площадке. */
-    public void newWorld() {
-        InstanceContainer next = Worlds.create();
-        InstanceContainer old = world;
-        for (Player pl : players.values()) {
-            pl.setInstance(next, new Pos(spawnX, Y, spawnZ));
+    /**
+     * Сколько непустых блоков в этом мире. Нужно как доказательство, что карта
+     * действительно построилась, а не осталась пустотой.
+     */
+    public int countBlocks() {
+        int n = 0;
+        for (var chunk : world.getChunks()) {
+            int bx = chunk.getChunkX() * 16, bz = chunk.getChunkZ() * 16;
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int y = 55; y <= 90; y++) {
+                        Block b = world.getBlock(bx + x, y, bz + z);
+                        if (b != null && !b.air()) n++;
+                    }
+                }
+            }
         }
-        world = next;
+        return n;
+    }
+
+    /** Точка появления в этом мире (ноги на {@link #Y}). */
+    public Pos spawnPos() {
+        return new Pos(spawnX, Y, spawnZ, 180f, 0f);
+    }
+
+    /**
+     * Новый <b>пустой</b> мир комнаты — игроков пока не трогаем.
+     *
+     * <p>Так раунд строится целиком и только потом все переносятся: если бы
+     * игроков перебрасывало сразу, они секунду стояли бы в пустоте, а при
+     * ошибке в постройке — остались бы там навсегда. Ровно это и выглядело
+     * как «просто плоский мир, ничего нет».
+     */
+    public InstanceContainer beginWorld() {
+        InstanceContainer old = world;
+        world = Worlds.create();
         followLights.clear();
-        if (old != null) MinecraftServer.getInstanceManager().unregisterInstance(old);
+        if (old != null) retire(old);
+        return world;
+    }
+
+    /** Перенести всех игроков комнаты в текущий мир. */
+    public void moveIn() {
+        teleportAll();
+    }
+
+    /** Старый мир уходит в очередь на уборку: unregister падает, пока внутри люди. */
+    private static void retire(InstanceContainer old) {
+        if (!RETIRED.contains(old)) RETIRED.add(old);
+        sweepRetired();
+    }
+
+    /** Добить миры, из которых все ушли (вызывается из тика хаба). */
+    public static void sweepRetired() {
+        RETIRED.removeIf(world -> {
+            if (!world.getPlayers().isEmpty()) return false;
+            try {
+                MinecraftServer.getInstanceManager().unregisterInstance(world);
+                return true;
+            } catch (RuntimeException e) {
+                // кто-то ещё внутри — попробуем в следующий раз
+                return false;
+            }
+        });
     }
 
     /* ---------------- Host ---------------- */

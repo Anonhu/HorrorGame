@@ -24,6 +24,8 @@ python3 shaderpack/tools/check_iris_26_3.py
 echo
 python3 tools/check_minestom_26_3.py | tail -3
 echo
+python3 tools/check_keys.py
+echo
 python3 tools/verify_stubs.py | tail -5
 
 if [ "${SKIP_PREVIEW:-0}" != "1" ]; then

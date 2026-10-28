@@ -168,9 +168,10 @@ public final class PackServer {
                 <h2>Ресурспак · %s</h2>
                 <a href="/pack.zip">ps1-halloween.zip — текстуры 16×16, анимации огня, встроенный шейдер</a>
                 <p class="small">Сервер пришлёт его сам при входе. Вручную: <code>%s</code></p>
-                <p class="small">Внутри пака уже лежит <b>core-шейдер</b> (<code>shaders/core/terrain.fsh</code>):
-                   холодный ночной цвет, сканлайны и 15-битная палитра включаются сами,
-                   без Iris и OptiFine.</p>
+                <p class="small">Внутри пака уже лежит <b>core-шейдер</b> (<code>shaders/core/lightmap.fsh</code>):
+                   холодная луна, тёплые огни и палитра 5 бит на канал включаются сами,
+                   без Iris и OptiFine. Это <b>lightmap</b>, а не terrain, поэтому
+                   фильтр работает и с Sodium (Fabulously Optimized и подобные сборки).</p>
                 <h2>Лобби</h2>
                 <a href="/preview/lobby.png">площадь с тремя входами и палым лесом</a>
                 <a href="/preview/fire.png">плёнка анимации костра (8 кадров)</a>

@@ -45,7 +45,7 @@ cd minestom
 Проверить правила без Minecraft:
 
 ```bash
-cd minestom && ./gradlew selfTest     # 30 проверок трёх режимов
+cd minestom && ./gradlew selfTest     # 41 проверка трёх режимов и мира
 ```
 
 ## Быстрый старт: браузерный хаб (быстро позвать друзей)

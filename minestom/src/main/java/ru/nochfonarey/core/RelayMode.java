@@ -184,7 +184,7 @@ public final class RelayMode extends Mode {
         lanternX = x;
         lanternZ = z;
         lanternCharge = Math.max(0, lanternCharge - 15);
-        host.block((int) x, GROUND_Y + 1, (int) z, "lantern_block");
+        host.block((int) x, GROUND_Y + 1, (int) z, Keys.SEA_LANTERN);
         host.light((int) x, GROUND_Y + 1, (int) z, 12);
         chatAll("Фонарь на земле! Подберите его.", Tone.WARN);
         host.soundAt(x, z, "minecraft:block.lantern.place", 1.2f, 0.7f);

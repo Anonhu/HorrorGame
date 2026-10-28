@@ -11,7 +11,11 @@ out/
 *.class
 *.jar
 
-# editors / os
+# python
+__pycache__/
+*.pyc
+
+# редакторы и ОС
 .idea/
 .vscode/
 .DS_Store

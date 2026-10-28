@@ -275,6 +275,9 @@ def render(blocks, path, title=""):
     order = sorted(blocks, key=lambda b: (b[0] + b[2], b[1], b[0]))
     for (x, y, z, key) in order:
         key = key.split("@")[0]
+        # невидимая стена невидима и на картинке: иначе кромка станет серой
+        if key == "barrier":
+            continue
         entry = BLOCKS.get(key, (None, None, (120, 120, 130)))
         top_name, side_name = entry[0], entry[1]
         top_tex = tex.get(top_name) if top_name else None

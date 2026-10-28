@@ -25,6 +25,15 @@ public class Player extends Entity {
     public boolean openInventory(Inventory inventory) { return true; }
     public void closeInventory() { }
     public void setRespawnPoint(Pos pos) { }
+    public Pos getRespawnPoint() { return null; }
+    public void setHealth(float health) { }
+    public void setFood(int food) { }
+    public void setFoodSaturation(float saturation) { }
+    public void setFireTicks(int ticks) { }
+    public void setLevel(int level) { }
+    public void setExp(float exp) { }
+    public void clearEffects() { }
+    public void respawn() { }
     public void setInstance(Instance instance, Pos pos) { }
     public net.minestom.server.network.player.PlayerConnection getPlayerConnection() { return null; }
 }

@@ -2,7 +2,7 @@
 """
 Проверка встроенных core-шейдеров пака против настоящих шейдеров 26.3.
 
-Пак переопределяет `assets/minecraft/shaders/core/terrain.fsh` и `entity.fsh` —
+Пак переопределяет `assets/minecraft/shaders/core/lightmap.fsh` —
 это обычные core-шейдеры Minecraft, они работают без Iris и OptiFine. Но у
 клиента нет «мягкого режима»: если в переопределении разойдётся объявление
 uniform или `layout(location = …) in`, мир может отрисоваться чёрным.
@@ -14,7 +14,12 @@ uniform или `layout(location = …) in`, мир может отрисоват
   * набор `#include <minecraft:…>` (ни одного лишнего, ни одного забытого);
   * все объявления `uniform`;
   * все объявления `layout(location = N) in/out`;
-  * набор макросов `#ifdef / #ifndef / #if defined(…)`.
+  * набор макросов `#ifdef / #ifndef / #if defined(…)`;
+  * состав uniform-блоков `layout(std140) uniform … { … }` — по членам.
+
+Именно `lightmap` выбран потому, что Sodium не запрещает его переопределять
+(в его чёрном списке только terrain/rendertype_*), а сам он сэмплит ванильную
+lightmap-текстуру — значит фильтр работает и с Sodium.
 
 Отличаться разрешено только телу. Плюс проверяется, что `fragColor`
 присваивается и что скобки сбалансированы.
@@ -36,12 +41,15 @@ ASSETS_TAG = "26.3-assets"
 BASE = "/repos/misode/mcmeta/contents/assets/minecraft/shaders/core/"
 
 # какие ванильные core-шейдеры мы переопределяем
-OVERRIDDEN = ["terrain.fsh", "entity.fsh"]
+OVERRIDDEN = ["lightmap.fsh"]
 
 INCLUDE = re.compile(r"#include\s+<([^>]+)>")
 UNIFORM = re.compile(r"^\s*uniform\s+([\w<>\[\]]+)\s+(\w+)(\s*\[\s*\d+\s*\])?\s*;", re.M)
 LAYOUT = re.compile(r"^\s*layout\s*\(([^)]*)\)\s*(in|out)\s+([\w<>\[\]]+)\s+(\w+)", re.M)
 MACRO = re.compile(r"#\s*(?:ifdef|ifndef)\s+(\w+)|#\s*if\s+defined\s*\(\s*(\w+)\s*\)")
+# layout(std140) uniform LightmapInfo { float SkyFactor; … } lightmapInfo;
+U_BLOCK = re.compile(r"layout\s*\(([^)]*)\)\s*uniform\s+(\w+)\s*\{(.*?)\}\s*(\w+)?\s*;", re.S)
+U_MEMBER = re.compile(r"^\s*([\w]+)\s+(\w+)\s*(\[[^\]]*\])?\s*;")
 VERSION = re.compile(r"^\s*#version\s+(\d+)(.*)$", re.M)
 EXTENSION = re.compile(r"^\s*#extension\s+(\S+)\s*:\s*(\w+)", re.M)
 
@@ -75,6 +83,19 @@ def load(refresh):
     return json.load(open(CACHE))
 
 
+def uniform_blocks(src):
+    """(имя блока, раскладка, члены) — состав uniform-блока тоже контракт с клиентом."""
+    out = []
+    for layout, name, members, instance in U_BLOCK.findall(src):
+        member = []
+        for line in members.split(";"):
+            m = U_MEMBER.match(line + ";")
+            if m:
+                member.append((m.group(1), m.group(2), (m.group(3) or "").replace(" ", "")))
+        out.append((name, layout.replace(" ", ""), instance, tuple(member)))
+    return sorted(out)
+
+
 def facts(src):
     """Всё, что клиент связывает с этим шейдером, — должно совпадать."""
     src_nc = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
@@ -88,6 +109,7 @@ def facts(src):
         "layout": sorted({(m.group(1).replace(" ", ""), m.group(2), m.group(3), m.group(4))
                           for m in LAYOUT.finditer(src_nc)}),
         "macro": sorted({a or b for a, b in MACRO.findall(src_nc)}),
+        "ubock": uniform_blocks(src_nc),
         "src": src_nc,
     }
 
@@ -111,7 +133,8 @@ def main():
 
         for key, human in (("version", "#version"), ("extension", "#extension"),
                            ("include", "#include <minecraft:…>"), ("uniform", "uniform"),
-                           ("layout", "layout(location) in/out"), ("macro", "макросы #ifdef")):
+                           ("layout", "layout(location) in/out"), ("macro", "макросы #ifdef"),
+                           ("ubock", "uniform-блоки (std140)")):
             extra = [x for x in ours[key] if x not in ref[key]]
             lost = [x for x in ref[key] if x not in ours[key]]
             if extra or lost:

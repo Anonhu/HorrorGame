@@ -16,12 +16,19 @@ package ru.nochfonarey.core;
  *   <li><b>Постоялый двор</b> — крыльцо трактира: доски, ковёр, свечи, бочки
  *       и полки.</li>
  * </ul>
+ *
+ * <p>Вокруг площадки — пустота и невидимая стена {@link Keys#BARRIER}:
+ * из комнаты ожидания нельзя уйти пешком никуда.
  */
 public final class RoomLobby {
 
     /** Пол комнаты ожидания: ноги игрока на этом +1. */
     public static final int Y = 64;
     private static final double R = 9.5;
+    /** Невидимая стена вокруг площадки. */
+    public static final double WALL_R = 9.4;
+    public static final double WALL_T = 1.8;
+    public static final int WALL_H = 6;
 
     private RoomLobby() {
     }
@@ -32,11 +39,23 @@ public final class RoomLobby {
             case "inn" -> inn(w);
             default -> lantern(w);
         }
+        wall(w);
         for (int i = 0; i < 8; i++) {
             double a = Math.PI * 2 * i / 8 + 0.4;
             int x = (int) Math.round(Math.cos(a) * 7);
             int z = (int) Math.round(Math.sin(a) * 7);
             w.light(x, Y + 4, z, 13);
+        }
+    }
+
+    /** Невидимая стена по кромке площадки: сплошное кольцо, без диагональных щелей. */
+    private static void wall(Blueprint w) {
+        for (int i = -14; i <= 14; i++) {
+            for (int j = -14; j <= 14; j++) {
+                double r = Math.hypot(i + 0.5, j + 0.5);
+                if (r < WALL_R || r > WALL_R + WALL_T) continue;
+                for (int y = Y + 1; y <= Y + WALL_H; y++) w.put(i, y, j, Keys.BARRIER);
+            }
         }
     }
 
@@ -46,11 +65,13 @@ public final class RoomLobby {
     private static void lantern(Blueprint w) {
         for (int i = -11; i <= 11; i++) {
             for (int j = -11; j <= 11; j++) {
-                double r = Math.hypot(i, j);
+                double r = Math.hypot(i + 0.5, j + 0.5);
                 if (r > R) continue;
                 String floor = r > 7.5 ? Keys.PATH
                         : (Lobby.hash(i, j, 31) > 0.7 ? Keys.DIRT : Keys.GRASS_BLOCK);
                 w.put(i, Y, j, floor);
+                w.put(i, Y - 1, j, Keys.STONE);
+                w.put(i, Y - 2, j, Keys.DIRT);
                 for (int y = Y + 1; y <= Y + 7; y++) w.clear(i, y, j);
                 // земляное кольцо по кромке: игрок видит, где край
                 if (r > R - 1.0) {
@@ -98,7 +119,7 @@ public final class RoomLobby {
     private static void relay(Blueprint w) {
         for (int i = -11; i <= 11; i++) {
             for (int j = -11; j <= 11; j++) {
-                double r = Math.hypot(i, j);
+                double r = Math.hypot(i + 0.5, j + 0.5);
                 if (r > R) continue;
                 boolean aisle = Math.abs(i) <= 1;
                 w.put(i, Y, j, aisle ? Keys.TILES : Keys.BRICK);
@@ -160,7 +181,7 @@ public final class RoomLobby {
     private static void inn(Blueprint w) {
         for (int i = -11; i <= 11; i++) {
             for (int j = -11; j <= 11; j++) {
-                double r = Math.hypot(i, j);
+                double r = Math.hypot(i + 0.5, j + 0.5);
                 if (r > R) continue;
                 w.put(i, Y, j, Math.abs(i) <= 1 ? Keys.CARPET : Keys.PLANKS_DARK);
                 for (int y = Y + 1; y <= Y + 7; y++) w.clear(i, y, j);

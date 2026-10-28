@@ -128,6 +128,12 @@ public final class InnMode extends Mode {
     }
 
     private void definePlan() {
+        // план пересобирается с нуля: иначе после /h reset комнаты и двери
+        // дублируются, и «не гость» бродит по двум одинаковым домам
+        rooms.clear();
+        doors.clear();
+        candles.clear();
+        bodies.clear();
         // сетка 3×3, стены по линиям x=3,13,27,40 и z=3,13,25,34
         rooms.add(new Rect("b1", "Спальня 1", 3, 3, 11, 11));
         rooms.add(new Rect("b2", "Спальня 2", 13, 3, 15, 11));

@@ -2,10 +2,10 @@
 """
 Как выглядит мир со встроенным core-шейдером пака — без клиента.
 
-Берёт изометрическую картинку лобби и прогоняет через ту же самую
-математику, что в `assets/minecraft/shaders/core/terrain.fsh` (функция
-`ps1_grade`): холодные тени, тёплые огни, сканлайны и 15-битный цвет
-с упорядоченным джиттером. Слева — без шейдера, справа — с ним.
+Берёт изометрическую картинку лобби и прогоняет через ту же математику,
+что в `assets/minecraft/shaders/core/lightmap.fsh`: холодная луна,
+тёплые огни и 5 бит на канал (`ps1_quantize`). Слева — без фильтра,
+справа — с ним.
 
     python3 tools/preview_core.py [картинка.png]
 """
@@ -79,26 +79,19 @@ def smoothstep(a, b, x):
 
 
 def ps1_grade(r, g, b, x, y):
-    """Пиксель-в-пиксель то же, что делает ps1_grade() в terrain.fsh."""
-    l = 0.299 * r + 0.587 * g + 0.114 * b
-    # mix(vec3(l), c, 1.14)
-    r, g, b = l + (r - l) * 1.14, l + (g - l) * 1.14, l + (b - l) * 1.14
-    # холодная ночь → тёплые огни
-    t = smoothstep(0.08, 0.72, l)
-    cold = (0.88, 0.93, 1.07)
-    warm = (1.08, 1.01, 0.92)
+    """То же, что делает lightmap.fsh: холодные тени, тёплые огни, 5 бит на канал."""
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    # mix(cold, warm, smoothstep(0.02, 0.55, lum))
+    t = smoothstep(0.02, 0.55, lum)
+    cold = (0.84, 0.93, 1.14)
+    warm = (1.12, 1.01, 0.86)
     r *= cold[0] + (warm[0] - cold[0]) * t
     g *= cold[1] + (warm[1] - cold[1]) * t
     b *= cold[2] + (warm[2] - cold[2]) * t
-    # сканлайны
-    scan = 1.0 - 0.05 * (0.5 + 0.5 * __import__("math").sin(y * 3.14159265))
-    r, g, b = r * scan, g * scan, b * scan
-    # 5 бит на канал + джиттер
-    d = BAYER[y & 3][x & 3] / 15.0 - 0.5
+    # floor(c * 31 + 0.5) / 31 — палитра PlayStation
     out = []
     for c in (r, g, b):
-        v = c * 31.0 + d + 0.5
-        out.append(int(max(0, min(31, int(v // 1)))) * 255 / 31.0)
+        out.append(int(max(0.0, min(1.0, c)) * 31.0 + 0.5) * 255 / 31.0)
     return tuple(int(max(0, min(255, v))) for v in out)
 
 
@@ -127,7 +120,7 @@ def main():
     path = os.path.join(ROOT, "preview-core-shader.png")
     write_png(path, w * 2 + gap, h, [b"".join(row) for row in out])
     print(f"{os.path.basename(src)} → {os.path.basename(path)} "
-          f"({w * 2 + gap}×{h}); слева ваниль, справа core-шейдер пака")
+          f"({w * 2 + gap}×{h}); слева ваниль, справа фильтр пака")
 
 
 if __name__ == "__main__":

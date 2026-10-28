@@ -14,9 +14,9 @@
 | Iris (шейдеры) | ветка `26.3` | `check_iris_26_3.py` |
 | Текстуры | 80 файлов, все имена ванильные | список файлов клиента 26.3 |
 | Анимации | 8 текстур-лент + `.png.mcmeta` | `gen_textures.py`, `preview_anim.py` |
-| Core-шейдер пака | `terrain.fsh`, `entity.fsh` — объявления один в один с ванильными | `check_core_shaders.py` |
-| Java-сборка | ECJ 3.46.100 на JRE 25.0.2, 93 файла, 0 ошибок | `tools/build_offline.sh` |
-| API для компиляции | 65 типов заглушек, 196 членов, 24 унаследованных, 0 расхождений | `tools/verify_stubs.py` |
+| Core-шейдер пака | `lightmap.fsh` — объявления один в один с ванильным, включая uniform-блок | `check_core_shaders.py` |
+| Java-сборка | ECJ 3.46.100 на JRE 25.0.2, 94 файла, 0 ошибок | `tools/build_offline.sh` |
+| API для компиляции | 66 типов заглушек, 216 членов, 29 унаследованных, 0 расхождений | `tools/verify_stubs.py` |
 
 ## Проверки
 
@@ -80,7 +80,7 @@ bash tools/build_offline.sh                   # компиляция + SelfTest 
 | Компилятор | javac из toolchain | ECJ 3.46.100 (npm `exoproc-jjit`), JRE 25.0.2 (PyPI `jdk4py`) |
 | Зависимости | Minestom 26.3 из JitPack/Maven | `tools/stubs` — заглушки, **сверенные** с исходниками `26_3` |
 | Компиляция | `compileJava`, `options.release = 25` | `-17` (кода новее 17 в проекте нет) + `-encoding UTF-8` |
-| Тесты | `selfTest` | тот же `ru.nochfonarey.core.SelfTest`, 29 проверок |
+| Тесты | `selfTest` | тот же `ru.nochfonarey.core.SelfTest`, 41 проверка |
 
 ```
 $ bash tools/build_offline.sh
@@ -96,30 +96,57 @@ $ bash tools/build_offline.sh
 переехал из `...command.builder` в `...command`; `ChunkSupplier` — в
 `...utils.chunk`; `PlayerEvent` — в `...event.trait`; `Command.Executor` больше
 нет (есть отдельный `CommandExecutor.apply`); `PlayerInfo.onlinePlayers/maxPlayers`
-вместо `online/max`. Все правки внесены, прогон — 65 типов / 196 членов / 0 расхождений.
+вместо `online/max`. Все правки внесены, прогон — 66 типов / 216 членов / 0 расхождений.
 
 Ограничение одно и честное: заглушки повторяют имена и арность, но не типы
 возврата — типы сверяет `check_minestom_26_3.py` по строке сигнатуры.
 
-## Core-шейдер пака: почему он не может сломать рендер
+## Core-шейдер пака: почему lightmap, а не terrain
 
-Пак переопределяет `assets/minecraft/shaders/core/terrain.fsh` и `entity.fsh`.
+Первая версия переопределяла `shaders/core/terrain.fsh`. В игре это дало
+красную плашку **«The following resource packs are incompatible with Sodium»**
+и полностью отключило фильтр у всех, кто играет со сборками на Sodium
+(Fabulously Optimized и почти любой современный профиль).
+
+Причина — не наша ошибка, а устройство Sodium: он заменяет рендер чанков своим
+и принципиально не поддерживает чужие terrain-шейдеры
+(`ResourcePackScanner` перечисляет `terrain.*` и `rendertype_*` в чёрном списке).
+
+**Решение**: фильтруем не геометрию, а свет. `lightmap.fsh` рисуется ванильным
+кодом, Sodium только сэмплит получившуюся текстуру (`u_LightTex`), поэтому
+подмена файла работает и с Sodium, и без него. Заодно это дешевле: одна
+текстура 16×16 вместо полноэкранного прохода.
+
 У клиента нет «мягкого режима»: если в переопределении разойдётся `uniform`
 или `layout(location = N) in`, мир может стать чёрным. Поэтому
-`check_core_shaders.py` берёт ванильные шейдеры тега `26.3-assets` и требует
+`check_core_shaders.py` берёт ванильный шейдер тега `26.3-assets` и требует
 полного совпадения объявлений:
 
-| Что сверяется | terrain.fsh | entity.fsh |
-|---|---|---|
-| `#version` / `#extension` | 330 / `GL_ARB_separate_shader_objects` | то же |
-| `#include <minecraft:…>` | 6 | 4 |
-| `uniform` | 1 (`Sampler0`) | 3 |
-| `layout(location = N) in/out` | 6 | 10 |
-| макросы `#ifdef` | 4 | 9 |
+| Что сверяется | lightmap.fsh |
+|---|---|
+| `#version` / `#extension` | 330 / `GL_ARB_separate_shader_objects` |
+| `#include <minecraft:…>` | 0 |
+| `uniform` (вне блока) | 0 |
+| `layout(location = N) in/out` | 2 (`texCoord`, `fragColor`) |
+| макросы `#ifdef` | 0 |
+| `layout(std140) uniform LightmapInfo` | 11 полей, по именам и типам |
 
-Отличается только тело: в конце `fragColor` прогоняется через `ps1_grade()`
-(холодные тени, тёплые огни, сканлайны 5 %, 5 бит на канал с джиттером Bayer 4×4).
-Итог — 0 расхождений, то есть переопределение объявляет ровно тот же контракт.
+Отличается только тело: в конце цвет прогоняется через холодную луну,
+тёплый огонь и квантование 5 бит на канал. Итог — 0 расхождений.
+
+### Почему не пост-эффектами
+
+Пост-эффекты в ванильном клиенте (`shaders/post/*.json`: blur, invert,
+creeper, spider) запускаются **по событию** — вспышка крипера, зрение паука,
+распад зрителя. Постоянную цепочку пост-обработки ресурспак объявить не может:
+нет ни строчки, которая включила бы её всегда. Iris/OptiFine это умеют, но их
+поддержка — это отдельный шейдерпак (`ps1-full.zip` в `shaderpack/`).
+
+`lightmap.fsh` даёт ровно тот эффект, который нужен, и при этом:
+* не в чёрном списке Sodium — работает в сборках с ним;
+* рисуется ванильным кодом, так что окно, текст, рука и частицы остаются
+  нетронутыми;
+* дешёвый: 16×16 текстура вместо полноэкранного прохода.
 
 Проверить глазами: `resourcepack/preview-core-shader.png` — слева ваниль,
 справа тот же кадр через `ps1_grade()` (`tools/preview_core.py`).

@@ -35,6 +35,11 @@ public final class Hub {
     public static final Pos LOBBY = new Pos(Lobby.SPAWN_X, Lobby.FLOOR + 1,
             Lobby.SPAWN_Z, Lobby.SPAWN_YAW, 0f);
     public static final double DT = 1.0 / 20.0;
+    /**
+     * Ниже этой высоты — уже пустота: пол лобби 63, пол арен 64, подвал двора
+     * там же. Всё, что ниже, — падение, и игрока возвращают на спавн.
+     */
+    public static final double VOID_Y = 45;
 
     public static Hub I;
 
@@ -152,8 +157,7 @@ public final class Hub {
         if (room != null) room.remove(player.getUuid().toString());
         wasDead.remove(player.getUuid().toString());
         if (toLobby) {
-            player.setGameMode(GameMode.ADVENTURE);
-            player.getInventory().clear();
+            prepare(player, GameMode.ADVENTURE);
             player.setInstance(lobby, LOBBY);
             player.setRespawnPoint(LOBBY);
             giveLobbyKit(player);
@@ -169,17 +173,42 @@ public final class Hub {
         double[] centre = arenaCenter(room.type);
         host.spawnX = centre[0];
         host.spawnZ = centre[1];
-        host.newWorld();
-        boolean ok = room.start();
+        host.followY = (int) NetHost.Y + 2;
+        // пустой мир: арену строим ДО того, как перенести людей
+        host.beginWorld();
+        boolean ok;
+        try {
+            ok = room.start();
+        } catch (RuntimeException e) {
+            System.err.println("[room " + room.code + "] арена не построилась: " + e);
+            e.printStackTrace();
+            ok = false;
+        }
         if (!ok) {
-            by.sendMessage(Component.text("Не вышло начать раунд.", NamedTextColor.RED));
+            // откат: обратно в комнату ожидания, а не в пустой мир
+            toWaitingRoom(room);
+            by.sendMessage(Component.text("Не вышло начать раунд — вернул всех в комнату.", NamedTextColor.RED));
             return false;
         }
+        // доказательство, что карта на месте: считаем, что и правда стоит в мире
+        int built = host.countBlocks();
+        System.out.println("[arena] " + room.type + ": " + built + " блоков, спавн ("
+                + (int) host.spawnX + "," + (int) host.spawnZ + ")");
+        by.sendMessage(Component.text("Арена " + titleOf(room.type) + " построена: "
+                + built + " блоков.", NamedTextColor.DARK_GRAY));
+        if (built < 500) {
+            // карта не построилась: лучше вернуть всех в комнату, чем оставить в пустоте
+            System.err.println("[arena] карта не построилась: " + built + " блоков — откат");
+            toWaitingRoom(room);
+            by.sendMessage(Component.text("Карта не построилась — вернул всех в комнату ожидания."
+                    + " Подробности в консоли сервера.", NamedTextColor.RED));
+            return false;
+        }
+        // у всех чистое состояние: прошлый раунд не оставляет ни предметов, ни огня
         for (P p : room.players.values()) {
             Player pl = host.player(p.id);
             if (pl == null) continue;
-            pl.setGameMode(GameMode.ADVENTURE);
-            pl.getInventory().clear();
+            prepare(pl, GameMode.ADVENTURE);
             pl.getInventory().setItemStack(0, itemFor(room.type, p));
             pl.getInventory().setItemStack(8, Items.compass());
             wasDead.remove(p.id);
@@ -191,26 +220,62 @@ public final class Hub {
     }
 
     public void reset(Room room, Player by) {
+        toWaitingRoom(room);
+        for (P p : room.players.values()) {
+            Player pl = ((NetHost) room.host).player(p.id);
+            if (pl == null) continue;
+            pl.sendMessage(Component.text("Комната сброшена. /h start — новый раунд.", NamedTextColor.GOLD));
+        }
+    }
+
+    /**
+     * Вернуть комнату в комнату ожидания: свежий мир, свежая площадка,
+     * у всех пустой инвентарь и лобби-набор. Используется и после раунда,
+     * и при откате неудачного старта.
+     */
+    private void toWaitingRoom(Room room) {
         NetHost host = (NetHost) room.host;
         host.spawnX = 0;
         host.spawnZ = 0;
-        host.newWorld();
+        host.followY = RoomLobby.Y + 3;
+        host.beginWorld();
         RoomLobby.build(new McBlueprint(host.world()), modeKey(room.type));
         room.reset();
         for (P p : room.players.values()) {
             p.x = 0;
             p.z = 0;
             p.yaw = 180f;
+            wasDead.remove(p.id);
         }
         for (P p : room.players.values()) {
             Player pl = host.player(p.id);
             if (pl == null) continue;
-            pl.setGameMode(GameMode.ADVENTURE);
-            pl.getInventory().clear();
-            giveLobbyKit(pl);
-            wasDead.remove(p.id);
-            pl.sendMessage(Component.text("Комната сброшена. /h start — новый раунд.", NamedTextColor.GOLD));
+            Hud hud = hudOf.remove(pl.getUuid());
+            if (hud != null) hud.close();
         }
+        host.moveIn();
+        for (P p : room.players.values()) {
+            Player pl = host.player(p.id);
+            if (pl == null) continue;
+            prepare(pl, GameMode.ADVENTURE);
+            giveLobbyKit(pl);
+        }
+    }
+
+    /**
+     * Чистое состояние игрока: ни предметов, ни огня, ни голода, ни эффектов
+     * от прошлой игры. Раньше предметы переезжали из раунда в раунд.
+     */
+    public static void prepare(Player player, GameMode mode) {
+        player.getInventory().clear();
+        player.setHealth(20f);
+        player.setFood(20);
+        player.setFoodSaturation(5f);
+        player.setFireTicks(0);
+        player.setLevel(0);
+        player.setExp(0f);
+        player.clearEffects();
+        player.setGameMode(mode);
     }
 
     /** Ключ режима для RoomLobby — тот же язык, что в /h create. */
@@ -285,13 +350,28 @@ public final class Hub {
     public void tick() {
         ticks++;
         Ambience.lobby(lobbyWatchers(), ticks);
+        guard();
+        autoResetEnded();
+        NetHost.sweepRetired();
         for (GameServer gs : new ArrayList<>(servers)) {
+            // ввод со стороны Minecraft — по разу на комнату
             for (Room room : new ArrayList<>(gs.rooms)) {
-                NetHost host = (NetHost) room.host;
                 try {
-                    syncInput(room, host);
-                    gs.tick(DT);
-                    afterTick(room, host);
+                    syncInput(room, (NetHost) room.host);
+                } catch (RuntimeException e) {
+                    System.err.println("[room " + room.code + "] ввод: " + e);
+                }
+            }
+            // часы комнат двигаются ровно один раз за тик, а не по разу на комнату
+            try {
+                gs.tick(DT);
+            } catch (RuntimeException e) {
+                System.err.println("[tick] " + e);
+                e.printStackTrace();
+            }
+            for (Room room : new ArrayList<>(gs.rooms)) {
+                try {
+                    afterTick(room, (NetHost) room.host);
                 } catch (RuntimeException e) {
                     // один сломанный раунд не должен ронять сервер
                     System.err.println("[room " + room.code + "] " + e);
@@ -301,6 +381,68 @@ public final class Hub {
             gs.rooms.removeIf(r -> r.players.isEmpty());
         }
         servers.removeIf(s -> s.rooms.isEmpty());
+    }
+
+    /**
+     * Пустота и границы.
+     *
+     * <p>Лобби и комнаты висят в пустом мире, поэтому сойти с площадки нельзя:
+     * по кромке стоит невидимая стена, а если игрок всё-таки оказался ниже
+     * {@link #VOID_Y} (провалился, телепортнулся, застрял) — его возвращает
+     * на спавн: в комнате — на спавн арены, без комнаты — на площадь.
+     */
+    private void guard() {
+        for (Player pl : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+            Pos pos = pl.getPosition();
+            boolean inLobby = pl.getInstance() == lobby;
+            NetHost host = hostOf.get(pl.getUuid());
+            boolean fell = pos.y() < VOID_Y;
+            double dx = pos.x() - Lobby.CX, dz = pos.z() - Lobby.CZ;
+            boolean escaped = inLobby && Math.hypot(dx, dz) > Lobby.WALL_R + 3.5;
+            // мир комнаты пересоздали, а игрок остался в старом (например, не дождался
+            // переезда) — вернём его в актуальный мир комнаты
+            boolean lost = host != null && !inLobby && pl.getInstance() != host.world();
+            if (!fell && !escaped && !lost) continue;
+
+            if (inLobby || host == null) {
+                // площадь: полный сброс, человек только что был в пустоте
+                prepare(pl, GameMode.ADVENTURE);
+                pl.setInstance(lobby, LOBBY);
+                pl.setRespawnPoint(LOBBY);
+                giveLobbyKit(pl);
+                pl.sendMessage(Component.text(escaped
+                        ? "Дальше пустота. Площадь кончается у стены."
+                        : "Пустота не отпускает — ты снова на площади.",
+                        NamedTextColor.DARK_GRAY));
+            } else {
+                // арена: возвращаем на спавн и не трогаем роль — призрак остаётся призраком
+                Pos spawn = host.spawnPos();
+                if (pl.getInstance() != host.world()) {
+                    pl.setInstance(host.world(), spawn);
+                } else {
+                    pl.teleport(spawn);
+                }
+                pl.sendMessage(Component.text("Пустота вернула тебя на арену.", NamedTextColor.DARK_GRAY));
+            }
+        }
+    }
+
+    /** Раунд кончился — через {@link Room#endAt} возвращаем всех в комнату ожидания. */
+    private void autoResetEnded() {
+        double now = System.currentTimeMillis() / 1000.0;
+        for (GameServer gs : servers) {
+            for (Room room : new ArrayList<>(gs.rooms)) {
+                if (room.phase != Room.Phase.END || room.endAt <= 0 || now < room.endAt) continue;
+                toWaitingRoom(room);
+                for (P p : room.players.values()) {
+                    Player pl = ((NetHost) room.host).player(p.id);
+                    if (pl != null) {
+                        pl.sendMessage(Component.text("Ночь кончилась. /h start — ещё раз.",
+                                NamedTextColor.GOLD));
+                    }
+                }
+            }
+        }
     }
 
     private void syncInput(Room room, NetHost host) {

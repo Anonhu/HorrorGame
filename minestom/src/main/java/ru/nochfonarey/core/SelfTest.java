@@ -18,6 +18,8 @@ public final class SelfTest {
     private static int failures = 0;
 
     public static void main(String[] args) {
+        lobby();
+        arenas();
         lantern();
         relay();
         inn();
@@ -69,7 +71,11 @@ public final class SelfTest {
             blocks.put("f:" + id, (int) x + "," + (int) z + "," + level);
         }
 
+        /** Сколько блоков уже стояло, когда режим позвал ready(). */
+        int readyBlocks = 0;
+
         public void ready() {
+            readyBlocks = blocks.size();
             log.add("*: ready");
         }
 
@@ -102,6 +108,143 @@ public final class SelfTest {
 
     static void act(P p) {
         p.actUntil = 9e9;
+    }
+
+    /* ---------------- мира: лобби, стена, старт раунда ---------------- */
+
+    /** Blueprint, который просто запоминает раскладку: так проверяется геометрия. */
+    static final class TestBlueprint implements Blueprint {
+        final Map<String, String> cells = new HashMap<>();
+
+        public void put(int x, int y, int z, String key) {
+            cells.put(x + "," + y + "," + z, key);
+        }
+
+        public void light(int x, int y, int z, int level) {
+            cells.put(x + "," + y + "," + z, level <= 0 ? Keys.AIR : "light");
+        }
+
+        public void putFacing(int x, int y, int z, String key, String facing) {
+            cells.put(x + "," + y + "," + z, key);
+        }
+
+        String at(int x, int y, int z) {
+            return cells.get(x + "," + y + "," + z);
+        }
+
+        boolean solid(int x, int y, int z) {
+            String k = at(x, y, z);
+            return k != null && !k.equals(Keys.AIR) && !k.equals("light");
+        }
+
+        int count(String key) {
+            int n = 0;
+            for (String v : cells.values()) if (v.equals(key)) n++;
+            return n;
+        }
+    }
+
+    static void lobby() {
+        System.out.println("ЛОББИ И ПУСТОТА");
+        TestBlueprint w = new TestBlueprint();
+        Lobby.build(w);
+
+        check(w.solid(Lobby.CX, Lobby.FLOOR, Lobby.CZ), "под костром есть пол");
+        check(w.at(Lobby.CX, Lobby.FLOOR + 1, Lobby.CZ).equals(Keys.TILES), "в центре — плиты жертвенника");
+        check(w.solid((int) Lobby.SPAWN_X, Lobby.FLOOR, (int) Lobby.SPAWN_Z), "на спавне есть пол");
+        check(!w.solid((int) Lobby.SPAWN_X, Lobby.FLOOR + 1, (int) Lobby.SPAWN_Z),
+                "над спавном свободно — игрок не застревает");
+
+        // дыр в площади быть не должно: иначе игрок падает в пустоту из лобби
+        int holes = 0;
+        for (int x = Lobby.CX - 15; x <= Lobby.CX + 15; x++) {
+            for (int z = Lobby.CZ - 15; z <= Lobby.CZ + 15; z++) {
+                if (Math.hypot(x - Lobby.CX, z - Lobby.CZ) > 15) continue;
+                if (!w.solid(x, Lobby.FLOOR, z)) holes++;
+            }
+        }
+        check(holes == 0, "в площади нет дыр (дыр: " + holes + ")");
+
+        // стена по всему кругу: сбежать с площади нельзя
+        check(gaps(w, Lobby.CX, Lobby.CZ, Lobby.FLOOR, Lobby.WALL_R) == 0,
+                "невидимая стена замкнута по кругу, лобби");
+        check(w.count(Keys.BARRIER) > 500, "блоков стены: " + w.count(Keys.BARRIER));
+
+        TestBlueprint wait = new TestBlueprint();
+        RoomLobby.build(wait, "lantern");
+        check(wait.solid(0, RoomLobby.Y, 0), "в комнате ожидания есть пол под спавном");
+        check(gaps(wait, 0, 0, RoomLobby.Y, RoomLobby.WALL_R) == 0,
+                "комната ожидания тоже обнесена стеной");
+
+        // между полом и стеной не должно быть полосы пустоты: провалиться некуда
+        int rim = 0;
+        for (int x = -12; x <= 12; x++) {
+            for (int z = -12; z <= 12; z++) {
+                double r = Math.hypot(x + 0.5, z + 0.5);
+                if (r < RoomLobby.WALL_R - 0.2 || r > RoomLobby.WALL_R + 1.2) continue;
+                boolean wall = Keys.BARRIER.equals(wait.at(x, RoomLobby.Y + 1, z));
+                boolean floor = wait.solid(x, RoomLobby.Y, z);
+                // либо пол под ногами, либо стена на пути — не оба «нет»
+                if (!wall && !floor) rim++;
+            }
+        }
+        check(rim == 0, "у кромки комнаты нет полосы пустоты (дыр: " + rim + ")");
+    }
+
+    /**
+     * Сколько направлений вообще не упираются в стену.
+     *
+     * <p>Луч идёт в кольцо на 0,75…1,25 блока от его начала: любой блок,
+     * накрывающий такую точку, центром ближе чем 0,71 — значит лежит в кольце.
+     * Если хоть где-то стены нет, игрок пройдёт в пустоту.
+     */
+    static int gaps(TestBlueprint w, int cx, int cz, int floor, double wallR) {
+        int bad = 0;
+        for (int a = 0; a < 360; a++) {
+            double rad = Math.toRadians(a);
+            boolean wall = false;
+            for (int y = floor + 1; y <= floor + 3 && !wall; y++) {
+                for (double d = 0.05; d <= 1.35 && !wall; d += 0.1) {
+                    int x = (int) Math.floor(cx + Math.cos(rad) * (wallR + d));
+                    int z = (int) Math.floor(cz + Math.sin(rad) * (wallR + d));
+                    if (Keys.BARRIER.equals(w.at(x, y, z))) wall = true;
+                }
+            }
+            if (!wall) bad++;
+        }
+        return bad;
+    }
+
+    /** Арена строится до того, как игроков перенесут: иначе старт выглядит пустым. */
+    static void arenas() {
+        System.out.println("СТАРТ РАУНДА: КАРТА НА МЕСТЕ");
+        check(arenaBuilt(ModeType.LANTERN, 36, 36), "Фонарщики: на арене есть земля");
+        check(arenaBuilt(ModeType.RELAY, 8, 32), "Эстафета: на арене есть земля");
+        check(arenaBuilt(ModeType.INN, 21, 20), "Двор: на арене есть пол");
+        int min = 0;
+        for (ModeType type : ModeType.values()) min = Math.max(min, arenaBlocks(type));
+        System.out.println("       больше всего блоков ставит режим с " + min + " блоками");
+    }
+
+    static int arenaBlocks(ModeType type) {
+        TestHost host = new TestHost();
+        Room room = room(type, 4, host);
+        room.start();
+        return host.blocks.size();
+    }
+
+    static boolean arenaBuilt(ModeType type, int x, int z) {
+        TestHost host = new TestHost();
+        Room room = room(type, 4, host);
+        room.start();
+        // ready() вызывается в конце start(): к этому моменту карта уже стоит
+        boolean readyAfterBuild = host.readyBlocks > 100;
+        boolean floor = false;
+        for (int y = 63; y <= 66; y++) {
+            String k = host.blocks.get(x + "," + y + "," + z);
+            if (k != null) floor = true;
+        }
+        return readyAfterBuild && floor;
     }
 
     /* ---------------- Фонарщики ---------------- */
