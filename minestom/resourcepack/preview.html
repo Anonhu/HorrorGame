@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ТРИ НОЧИ · визуал: лобби, анимации, шейдер</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0d13; color: #d9d5c8;
+    font: 15px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background-image: radial-gradient(circle at 50% -10%, #1b2030 0%, #0b0d13 60%);
+  }
+  header { padding: 48px 24px 24px; max-width: 1180px; margin: 0 auto; }
+  h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: .16em; text-transform: uppercase; color: #ffb347; }
+  .sub { color: #8e8a80; max-width: 78ch; }
+  main { max-width: 1180px; margin: 0 auto; padding: 0 24px 80px; }
+  section { margin-top: 44px; border-top: 1px solid #232838; padding-top: 22px; }
+  h2 { font-size: 19px; margin: 0 0 6px; color: #f0e6d2; letter-spacing: .04em; }
+  h2 span { color: #6d7285; font-weight: 400; font-size: 14px; letter-spacing: 0; }
+  p.note { color: #8e8a80; margin: 6px 0 18px; max-width: 84ch; }
+  figure { margin: 0 0 26px; }
+  img { display: block; width: 100%; height: auto; image-rendering: pixelated; border: 1px solid #232838; border-radius: 4px; background: #0b0d13; }
+  figcaption { color: #7d8298; font-size: 13px; margin-top: 8px; }
+  figcaption b { color: #c9c3b4; font-weight: 600; }
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; border: 1px solid #353c52; color: #9aa1b8; margin-right: 6px; }
+  .ok { color: #7ad17a; }
+  code { color: #ffd9a0; }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 24px 60px; color: #6d7285; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Три ночи · визуал</h1>
+  <p class="sub">Четыре правки из задачи: костёр больше не вверх дном, текстуры снова
+  анимированы, PS1-шейдер встроен в сам ресурспак, а вместо коробки — площадь
+  с тремя арками режимов и отдельные комнаты ожидания. Всё нарисовано настоящими
+  текстурами пака, без клиента Minecraft.</p>
+</header>
+
+<main>
+  <section>
+    <h2>1 · Лобби <span>52×52, пол y=63, спавн у южных ворот</span></h2>
+    <p class="note">Круг из глубокого сланца с кирпичной каймой и тропинками к аркам.
+    В центре — костёр-алтарь на каменном возвышении и четыре столба с висящими фонарями.
+    По краю палый лес: бледные дубы, тыквы, паутина, черепа на кольях и тропинки.</p>
+    <figure>
+      <img src="lobby-lobby.png" alt="Лобби сверху">
+      <figcaption><b>Площадь.</b> Три арки с вывесками: «ФОНАРЩИКИ», «ЭСТАФЕТА СВЕТА»,
+      «ПОСТОЯЛЫЙ ДВОР». Свет поставлен невидимыми блоками, поэтому тени читаются, а факелов не видно.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2 · Комнаты ожидания <span>19×19, свои декорации у каждого режима</span></h2>
+    <p class="note">Раньше комната ожидания была пустым каменным квадратом. Теперь
+    у каждого режима своя сцена, в которую игроки попадают ещё до старта.</p>
+    <div class="pair">
+      <figure>
+        <img src="lobby-lantern.png" alt="Комната Фонарщиков">
+        <figcaption><b>Фонарщики.</b> Поляна: четыре потухших костра, шесть столбов
+        с фонарями на цепях, частокол из бледного дуба.</figcaption>
+      </figure>
+      <figure>
+        <img src="lobby-relay.png" alt="Комната Эстафеты света">
+        <figcaption><b>Эстафета света.</b> Развалины часовни: проход, вода по бокам,
+        алтарь с синим огнём и колонны на цепях.</figcaption>
+      </figure>
+      <figure>
+        <img src="lobby-inn.png" alt="Комната Постоялого двора">
+        <figcaption><b>Постоялый двор.</b> Крыльцо трактира: ковровая дорожка, стол
+        со свечами, бочки, сено, тыква с фонарём и навес над входом.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Анимации <span>8 текстур: лента 16×16·кадры + .png.mcmeta</span></h2>
+    <p class="note">Причина «мёртвого» костра была не в модели, а в паке: лежал один
+    кадр и не было <code>.mcmeta</code>, поэтому клиент считал текстуру статичной.
+    Теперь кадры нарезаны в ленту, а рядом лежит описание анимации.</p>
+    <figure>
+      <img src="preview-anim-campfire_fire.png" alt="Кадры пламени костра">
+      <figcaption><b>campfire_fire</b> — 8 кадров, frametime 2. Пламя широкое внизу,
+      узкое у кончика: так оно не выглядит перевёрнутым на модели костра.</figcaption>
+    </figure>
+    <figure>
+      <img src="preview-anim-campfire_log_lit.png" alt="Кадры тлеющих поленьев">
+      <figcaption><b>campfire_log_lit</b> — 4 кадра, frametime 20, <code>interpolate</code>:
+      угли тлеют плавно, без рывка.</figcaption>
+    </figure>
+    <div class="pair">
+      <figure>
+        <img src="preview-anim-lantern.png" alt="Кадры фонаря">
+        <figcaption><b>lantern</b> — 3 кадра, огонь внутри дрожит.</figcaption>
+      </figure>
+      <figure>
+        <img src="preview-anim-water_still.png" alt="Кадры воды">
+        <figcaption><b>water_still</b> — 16 кадров: две волны без шва.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Встроенный core-шейдер <span>shaders/core/terrain.fsh и entity.fsh</span></h2>
+    <p class="note">Шейдер лежит внутри ресурспака, поэтому включается сам при входе —
+    без Iris и OptiFine. Слева ванильная картинка, справа та же после
+    <code>ps1_grade()</code>: холодные тени, тёплые огни, сканлайны и 5 бит на канал
+    с джиттером Bayer 4×4.</p>
+    <figure>
+      <img src="preview-core-shader.png" alt="Ваниль и core-шейдер рядом">
+      <figcaption><b>Слева</b> — как отрисовал бы клиент, <b>справа</b> — с нашим core-шейдером.
+      Огонь остаётся тёплым, камень уходит в холодный синий.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Проверки <span>всё зелёное, без клиента и без Gradle</span></h2>
+    <p class="note">
+      <span class="tag ok">ok</span> <code>tools/build_offline.sh</code> — 93 файла, 0 ошибок, SelfTest пройден<br>
+      <span class="tag ok">ok</span> <code>verify_26_3.py</code> — 80 текстур, 8 анимаций (лента + mcmeta)<br>
+      <span class="tag ok">ok</span> <code>check_core_shaders.py</code> — объявления совпадают с ванильными 26.3<br>
+      <span class="tag ok">ok</span> <code>verify_stubs.py</code> — 65 типов, 196 членов, 0 расхождений
+    </p>
+  </section>
+</main>
+
+<footer>
+  Пересобрать всё: <code>bash tools/make-assets.sh</code> ·
+  только картинки: <code>bash tools/preview-lobby.sh</code>
+</footer>
+</body>
+</html>
