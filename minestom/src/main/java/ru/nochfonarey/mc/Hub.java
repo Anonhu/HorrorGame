@@ -12,11 +12,13 @@ import net.minestom.server.item.ItemStack;
 import ru.nochfonarey.core.GameServer;
 import ru.nochfonarey.core.InnMode;
 import ru.nochfonarey.core.LanternMode;
+import ru.nochfonarey.core.Lobby;
 import ru.nochfonarey.core.Mode;
 import ru.nochfonarey.core.ModeType;
 import ru.nochfonarey.core.P;
 import ru.nochfonarey.core.RelayMode;
 import ru.nochfonarey.core.Room;
+import ru.nochfonarey.core.RoomLobby;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,7 +31,9 @@ import java.util.UUID;
 /** Все комнаты сервера: лобби, вход по коду, тик 20 Гц, HUD. */
 public final class Hub {
 
-    public static final Pos LOBBY = new Pos(8.5, 65, 8.5, 180f, 0f);
+    /** Южный край площади, лицом к центральному костру. */
+    public static final Pos LOBBY = new Pos(Lobby.SPAWN_X, Lobby.FLOOR + 1,
+            Lobby.SPAWN_Z, Lobby.SPAWN_YAW, 0f);
     public static final double DT = 1.0 / 20.0;
 
     public static Hub I;
@@ -51,29 +55,7 @@ public final class Hub {
     public Hub() {
         I = this;
         lobby = Worlds.create();
-        buildLobby();
-    }
-
-    private void buildLobby() {
-        for (int x = 0; x <= 17; x++) {
-            for (int z = 0; z <= 17; z++) {
-                lobby.setBlock(x, 63, z, Block.DEEPSLATE_TILES);
-                lobby.setBlock(x, 64, z, Block.AIR);
-                for (int y = 65; y <= 68; y++) lobby.setBlock(x, y, z, Block.AIR);
-                boolean edge = x == 0 || x == 17 || z == 0 || z == 17;
-                if (edge) {
-                    for (int y = 64; y <= 65; y++) lobby.setBlock(x, y, z, Block.DARK_OAK_LOG);
-                }
-            }
-        }
-        int[][] fires = {{3, 3}, {14, 3}, {3, 14}, {14, 14}};
-        for (int[] f : fires) {
-            lobby.setBlock(f[0], 64, f[1], Block.CAMPFIRE);
-            lobby.setBlock(f[0], 67, f[1], BlockMap.light(13));
-        }
-        lobby.setBlock(8, 64, 2, Block.LODESTONE);
-        lobby.setBlock(8, 65, 2, BlockMap.light(14));
-        lobby.setBlock(9, 64, 2, Block.LODESTONE);
+        Lobby.build(new McBlueprint(lobby));
     }
 
     public InstanceContainer lobby() {
@@ -100,9 +82,19 @@ public final class Hub {
         servers.add(gs);
         servers.removeIf(s -> s.rooms.isEmpty());
 
+        // комната ожидания, а не пустой каменный мир
+        RoomLobby.build(new McBlueprint(host.world()), modeKey(type));
+        host.spawnX = 0;
+        host.spawnZ = 0;
+        host.followY = RoomLobby.Y + 3;
+
         hostOf.put(player.getUuid(), host);
         roomOf.put(player.getUuid(), room);
-        host.add(player, room.players.get(player.getUuid().toString()));
+        P created = room.players.get(player.getUuid().toString());
+        created.x = 0;
+        created.z = 0;
+        created.yaw = 180f;
+        host.add(player, created);
         giveLobbyKit(player);
         host.teleportAll();
 
@@ -138,6 +130,9 @@ public final class Hub {
         leave(player, false);
         NetHost host = (NetHost) target.host;
         P p = target.add(player.getUuid().toString(), player.getUsername());
+        p.x = 0;
+        p.z = 0;
+        p.yaw = 180f;
         target.lastActivity = System.currentTimeMillis();
         hostOf.put(player.getUuid(), host);
         roomOf.put(player.getUuid(), target);
@@ -171,6 +166,9 @@ public final class Hub {
             return false;
         }
         NetHost host = (NetHost) room.host;
+        double[] centre = arenaCenter(room.type);
+        host.spawnX = centre[0];
+        host.spawnZ = centre[1];
         host.newWorld();
         boolean ok = room.start();
         if (!ok) {
@@ -194,8 +192,16 @@ public final class Hub {
 
     public void reset(Room room, Player by) {
         NetHost host = (NetHost) room.host;
+        host.spawnX = 0;
+        host.spawnZ = 0;
         host.newWorld();
+        RoomLobby.build(new McBlueprint(host.world()), modeKey(room.type));
         room.reset();
+        for (P p : room.players.values()) {
+            p.x = 0;
+            p.z = 0;
+            p.yaw = 180f;
+        }
         for (P p : room.players.values()) {
             Player pl = host.player(p.id);
             if (pl == null) continue;
@@ -205,8 +211,24 @@ public final class Hub {
             wasDead.remove(p.id);
             pl.sendMessage(Component.text("Комната сброшена. /h start — новый раунд.", NamedTextColor.GOLD));
         }
-        host.spawnX = 8;
-        host.spawnZ = 8;
+    }
+
+    /** Ключ режима для RoomLobby — тот же язык, что в /h create. */
+    static String modeKey(ModeType type) {
+        return switch (type) {
+            case LANTERN -> "lantern";
+            case RELAY -> "relay";
+            case INN -> "inn";
+        };
+    }
+
+    /** Куда ставить игроков в момент пересоздания мира перед стартом раунда. */
+    private static double[] arenaCenter(ModeType type) {
+        return switch (type) {
+            case LANTERN -> new double[]{36, 36};
+            case RELAY -> new double[]{8, 32};
+            case INN -> new double[]{21, 20};
+        };
     }
 
     private static String titleOf(ModeType type) {
@@ -262,6 +284,7 @@ public final class Hub {
 
     public void tick() {
         ticks++;
+        Ambience.lobby(lobbyWatchers(), ticks);
         for (GameServer gs : new ArrayList<>(servers)) {
             for (Room room : new ArrayList<>(gs.rooms)) {
                 NetHost host = (NetHost) room.host;
@@ -363,6 +386,15 @@ public final class Hub {
                 }
             }
         }
+    }
+
+    /** Кто сейчас стоит на площади (а не в мире своей комнаты). */
+    private java.util.List<Player> lobbyWatchers() {
+        java.util.List<Player> out = new ArrayList<>();
+        for (Player pl : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+            if (pl.getInstance() == lobby) out.add(pl);
+        }
+        return out;
     }
 
     public void shutdown() {

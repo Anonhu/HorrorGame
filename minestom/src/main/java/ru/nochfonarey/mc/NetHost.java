@@ -144,8 +144,14 @@ public final class NetHost implements Host {
 
     @Override
     public void soundAt(double x, double z, String key, float volume, float pitch) {
+        soundFor(players.values(), x, z, key, volume, pitch);
+    }
+
+    /** То же, но слушателям передаются явно: площадь живёт отдельно от комнат. */
+    public static void soundFor(Collection<Player> targets, double x, double z,
+                                String key, float volume, float pitch) {
         Sound sound = sound(key, volume, pitch);
-        for (Player pl : players.values()) {
+        for (Player pl : targets) {
             Pos pos = pl.getPosition();
             double dx = pos.x() - x, dz = pos.z() - z;
             if (dx * dx + dz * dz > 48 * 48) continue;
@@ -160,6 +166,12 @@ public final class NetHost implements Host {
 
     @Override
     public void particle(String key, double x, double y, double z, int count, double spread) {
+        particleFor(players.values(), key, x, y, z, count, spread);
+    }
+
+    /** Частицы явным слушателям (используется площадью лобби). */
+    public static void particleFor(Collection<Player> targets, String key,
+                                   double x, double y, double z, int count, double spread) {
         String id = key.startsWith("minecraft:") ? key : "minecraft:" + key;
         Particle particle;
         try {
@@ -171,7 +183,7 @@ public final class NetHost implements Host {
         float s = (float) Math.max(0, spread);
         ParticlePacket packet = new ParticlePacket(particle,
                 x, y, z, s, s, s, 0.02f, Math.max(1, count));
-        for (Player pl : players.values()) {
+        for (Player pl : targets) {
             Pos pos = pl.getPosition();
             double dx = pos.x() - x, dz = pos.z() - z;
             if (dx * dx + dz * dz > 64 * 64) continue;

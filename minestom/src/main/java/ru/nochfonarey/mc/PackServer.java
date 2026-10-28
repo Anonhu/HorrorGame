@@ -16,10 +16,11 @@ import java.util.Locale;
  * Раздаёт PS1-ресурспак и шейдерпаки прямо из папки minestom/.
  * Встроенный HTTP-сервер JDK, без зависимостей.
  *
- * GET /                  — страничка с ссылками
+ * GET /                  — страничка с ссылками и картинками лобби
  * GET /pack.zip          — ресурспак (клиент тянет его сам при входе)
  * GET /shaders/ps1-lite.zip
  * GET /shaders/ps1-full.zip
+ * GET /preview/lobby.png, /preview/lobby-lantern.png, …  — как выглядит лобби
  */
 public final class PackServer {
 
@@ -81,6 +82,11 @@ public final class PackServer {
                 case "/shaders/ps1-lite.zip" -> file(ex, root.resolve("shaderpack").resolve("ps1-lite.zip"));
                 case "/shaders/ps1-full.zip" -> file(ex, root.resolve("shaderpack").resolve("ps1-full.zip"));
                 case "/pack.png" -> file(ex, root.resolve("resourcepack").resolve("pack.png"));
+                case "/preview/lobby.png" -> image(ex, root.resolve("resourcepack").resolve("lobby-lobby.png"));
+                case "/preview/lobby-lantern.png" -> image(ex, root.resolve("resourcepack").resolve("lobby-lantern.png"));
+                case "/preview/lobby-relay.png" -> image(ex, root.resolve("resourcepack").resolve("lobby-relay.png"));
+                case "/preview/lobby-inn.png" -> image(ex, root.resolve("resourcepack").resolve("lobby-inn.png"));
+                case "/preview/fire.png" -> image(ex, root.resolve("resourcepack").resolve("preview-anim-campfire_fire.png"));
                 case "/version", "/version.json" -> send(ex, 200, "application/json; charset=utf-8",
                         ("""
                                 {"minecraft":"26.3","protocol":777,"resource_pack":"97.1",
@@ -102,6 +108,21 @@ public final class PackServer {
         ex.getResponseHeaders().add("Content-Type", "application/zip");
         ex.getResponseHeaders().add("Content-Disposition", "attachment; filename=\"" + p.getFileName() + "\"");
         byte[] data = Files.readAllBytes(p);
+        ex.sendResponseHeaders(200, data.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            os.write(data);
+        }
+    }
+
+    private void image(com.sun.net.httpserver.HttpExchange ex, Path p) throws IOException {
+        if (!Files.isRegularFile(p)) {
+            send(ex, 404, "text/plain; charset=utf-8",
+                    "нет картинки — запустите bash tools/make-assets.sh".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+        byte[] data = Files.readAllBytes(p);
+        ex.getResponseHeaders().add("Content-Type", "image/png");
+        ex.getResponseHeaders().add("Cache-Control", "no-cache");
         ex.sendResponseHeaders(200, data.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(data);
@@ -145,8 +166,14 @@ public final class PackServer {
                 <h1>ТРИ НОЧИ</h1>
                 <p class="small">PS1-стиль для Minecraft 26.3 · раздаётся сервером Minestom</p>
                 <h2>Ресурспак · %s</h2>
-                <a href="/pack.zip">ps1-halloween.zip — текстуры 16×16, 15 бит</a>
+                <a href="/pack.zip">ps1-halloween.zip — текстуры 16×16, анимации огня, встроенный шейдер</a>
                 <p class="small">Сервер пришлёт его сам при входе. Вручную: <code>%s</code></p>
+                <p class="small">Внутри пака уже лежит <b>core-шейдер</b> (<code>shaders/core/terrain.fsh</code>):
+                   холодный ночной цвет, сканлайны и 15-битная палитра включаются сами,
+                   без Iris и OptiFine.</p>
+                <h2>Лобби</h2>
+                <a href="/preview/lobby.png">площадь с тремя входами и палым лесом</a>
+                <a href="/preview/fire.png">плёнка анимации костра (8 кадров)</a>
                 <h2>Шейдерпаки · Iris / OptiFine</h2>
                 <a href="/shaders/ps1-lite.zip">ps1-lite.zip — только пост-обработка (безопасно)</a>
                 <a href="/shaders/ps1-full.zip">ps1-full.zip — дрожание вершин и аффинные текстуры</a>

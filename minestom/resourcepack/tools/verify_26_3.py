@@ -11,6 +11,7 @@
 """
 import base64
 import json
+import struct
 import os
 import sys
 import urllib.request
@@ -112,11 +113,75 @@ def main():
         fails += 1
         print("       нет в ваниле 26.3:", m)
 
+    fails += check_animations(tex_root)
+
     if fails == 0:
         print("ИТОГ: пак собран точно под Minecraft 26.3 — все имена файлов существуют в клиенте.")
     else:
         print("ИТОГ: проблем —", fails)
     sys.exit(1 if fails else 0)
+
+
+def png_size(path):
+    """(ширина, высота) из IHDR без внешних библиотек."""
+    data = open(path, "rb").read(24)
+    return struct.unpack(">II", data[16:24])
+
+
+def check_animations(tex_root):
+    """Анимации: лента 16×16N плюс .png.mcmeta — иначе клиент покажет один кадр.
+
+    Правило клиента: `animation` в .mcmeta нужен, чтобы PNG высотой больше 16
+    считался лентой; без него берётся первый кадр (костёр «не горит»).
+    """
+    anim = ["campfire_fire", "campfire_log_lit", "lantern", "soul_lantern",
+            "water_still", "oak_leaves", "pale_oak_leaves", "sculk_vein"]
+    fails = 0
+    print("  ·    анимации:")
+    for name in anim:
+        png = os.path.join(tex_root, "block", name + ".png")
+        if not os.path.isfile(png):
+            fails += 1
+            print(f"  FAIL {name}.png нет")
+            continue
+        w, h = png_size(png)
+        meta = png + ".mcmeta"
+        frames = h / 16
+        ok = True
+        why = ""
+        if w != 16 or h % 16:
+            ok, why = False, f"лента должна быть 16×(16·кадры), а она {w}×{h}"
+        elif frames < 2:
+            ok, why = False, "один кадр — это не анимация"
+        elif not os.path.isfile(meta):
+            ok, why = False, "нет .png.mcmeta — клиент возьмёт только первый кадр"
+        else:
+            try:
+                anim_cfg = json.load(open(meta))["animation"]
+            except Exception as e:  # noqa: BLE001
+                ok, why = False, f".mcmeta не читается: {e}"
+            else:
+                if "frametime" not in anim_cfg and "frames" not in anim_cfg:
+                    ok, why = False, ".mcmeta без frametime/frames"
+        if ok:
+            ft = json.load(open(meta))["animation"].get("frametime", 1)
+            print(f"  ok   {name}: {int(frames)} кадров, frametime {ft}, лента {w}×{h}")
+        else:
+            fails += 1
+            print(f"  FAIL {name}: {why}")
+    # лишние .mcmeta без ленты тоже ошибка: клиент сочтёт текстуру лентой
+    for base, _d, names in os.walk(tex_root):
+        for n in names:
+            if not n.endswith(".png.mcmeta"):
+                continue
+            png = os.path.join(base, n[:-7])
+            if not os.path.isfile(png):
+                fails += 1
+                print(f"  FAIL {n}: рядом нет PNG")
+            elif png_size(png)[1] <= 16:
+                fails += 1
+                print(f"  FAIL {n}: PNG высотой 16, а .mcmeta обещает ленту")
+    return fails
 
 
 if __name__ == "__main__":

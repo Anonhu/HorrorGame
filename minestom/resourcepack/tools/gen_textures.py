@@ -4,8 +4,15 @@
 
 16×16, ограниченная палитра, упорядоченный джиттер (Bayer 4×4) и
 финальное квантование в 5 бит на канал — как на PlayStation.
+
+Анимированные текстуры (костёр, фонарь, вода, листва, скалк) рисуются
+несколькими кадрами и складываются в вертикальную ленту 16×16N — так же,
+как в ванильном клиенте, — и получают рядом файл .png.mcmeta. Без него
+клиент считает текстуру статичной: именно из-за этого костёр «не горел».
 Запуск:  python3 tools/gen_textures.py   (из папки resourcepack/)
 """
+import json
+import math
 import os
 import struct
 import zlib
@@ -192,12 +199,15 @@ def sand(img):
             ramp(img, x, y, [SAND_D, SAND_M, SAND_L], 0.2 + n * 0.7)
 
 
-def water(img):
+def water(img, frame=0, nf=16):
+    """Вода: две волны, бегущие в разные стороны — 16 кадров без шва."""
+    ph = 2.0 * math.pi * frame / max(1, nf)
     for y in range(H):
         for x in range(W):
-            w = 0.5 + 0.5 * ((x * 0.55 + y * 0.3) % 3.0) / 3.0
-            n = hsh(x, y, 20) * 0.35 + w * 0.65
-            ramp(img, x, y, [(12, 24, 34), (20, 38, 52), (30, 56, 74)], 0.1 + n * 0.8)
+            w1 = 0.5 + 0.5 * math.sin((x * 0.55 + y * 1.15) * 0.9 + ph)
+            w2 = 0.5 + 0.5 * math.sin((x * 0.22 - y * 0.70) * 1.7 - ph * 1.3)
+            n = (w1 * 0.6 + w2 * 0.4) * 0.75 + hsh(x, y, 20) * 0.25
+            ramp(img, x, y, [(12, 24, 34), (20, 38, 52), (30, 56, 74)], 0.1 + n * 0.85)
 
 
 def log_side(img, dark=False):
@@ -228,14 +238,17 @@ def log_top(img, dark=False):
             ramp(img, x, y, base, t)
 
 
-def leaves(img, pale=True):
+def leaves(img, pale=True, frame=0, nf=4):
+    """Крона: дыры в листве чуть качаются от кадра к кадру (ветер)."""
     if pale:
         base = [BONE_D, BONE_M, BONE_L]
     else:
         base = [MOSS_D, MOSS_M, MOSS_L]
+    ph = 2.0 * math.pi * frame / max(1, nf)
     for y in range(H):
         for x in range(W):
-            n = hsh(x, y, 24)
+            sway = math.sin(x * 0.55 + ph) * 0.06 + math.sin(y * 0.35 - ph) * 0.04
+            n = hsh(x, y, 24) + sway
             if n < 0.16:                     # дыры в кроне
                 continue
             t = n * 0.9
@@ -253,15 +266,20 @@ def fern(img):
                 ramp(img, x, y, [GRASS_D, GRASS_M, GRASS_L], 0.3 + hsh(x, y, 27) * 0.6)
 
 
-def sculk_vein(img):
+def sculk_vein(img, frame=0, nf=4):
+    """Скалк: вены медленно «дышат» бирюзовым."""
+    pulse = 0.5 + 0.5 * math.sin(2.0 * math.pi * frame / max(1, nf))
     for y in range(H):
         for x in range(W):
             v = hsh(x // 2, y // 2, 28)
             if v > 0.55:
-                ramp(img, x, y, [(10, 20, 26), (24, 52, 54), (42, 92, 90)], 0.2 + hsh(x, y, 29) * 0.7)
+                t = 0.18 + hsh(x, y, 29) * 0.55 + pulse * 0.32
+                ramp(img, x, y, [(10, 20, 26), (24, 52, 54), (42, 92, 90)], t)
 
 
-def lantern(img, soul=False):
+def lantern(img, soul=False, frame=0, nf=3):
+    """Фонарь: огонь внутри чуть дрожит — три кадра, как в ваниле."""
+    flick = 0.86 + 0.14 * math.sin(2.0 * math.pi * frame / max(1, nf) + 0.6)
     frame = [IRON_D, IRON_M, IRON_L]
     for y in range(H):
         for x in range(W):
@@ -275,9 +293,11 @@ def lantern(img, soul=False):
                 inner = max(abs(x - 7.5), abs(y - 7.5))
                 glow = 1.0 - inner / 8.0
                 if soul:
-                    ramp(img, x, y, [SOUL_D, SOUL_M, SOUL_L], 0.15 + glow * 0.9 + hsh(x, y, 31) * 0.2)
+                    ramp(img, x, y, [SOUL_D, SOUL_M, SOUL_L],
+                         0.15 + glow * 0.9 * flick + hsh(x, y, 31) * 0.2)
                 else:
-                    ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L], 0.1 + glow * 0.95 + hsh(x, y, 32) * 0.2)
+                    ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L],
+                         0.1 + glow * 0.95 * flick + hsh(x, y, 32) * 0.2)
 
 
 def torch(img, soul=False):
@@ -346,32 +366,129 @@ def lodestone_top(img):
         put(img, 8 + int(round(__import__("math").cos(a) * 4.4)), 8 + int(round(__import__("math").sin(a) * 4.4)), FIRE_M)
 
 
-def campfire_logs(img, lit=False):
-    for log in range(4):
-        top = log * 4
-        for x in range(W):
-            if x in (0, 15):
+def campfire_logs(img, lit=False, frame=0, nf=4):
+    """Поленья костра — ровно в ванильной раскладке.
+
+    Клиент режет эту текстуру фиксированными кусками (модель костра):
+      • строки 0–3          — верхняя грань полена (16 в ширину);
+      • строки 4–7, x 0–3   — спил (4×4), остальное там прозрачно;
+      • строки 8–15         — боковины поленьев.
+    Раньше здесь были просто четыре полосы — на модели это давало кашу.
+
+    У горящего варианта кадры должны быть плотными (16×64, 4 кадра), иначе
+    анимация мерцает «дырами».
+    """
+    pulse = 0.5 + 0.5 * math.sin(2.0 * math.pi * frame / max(1, nf))
+
+    for y in range(4):                                   # верх
+        for x in range(H):
+            n = hsh(x, y, 37) * 0.45 + hsh(x // 2, y, 38) * 0.55
+            ramp(img, x, y, [WOOD_D, WOOD_M, WOOD_L], 0.34 + n * 0.58)
+
+    for y in range(4, 8):                                # спил 4×4
+        for x in range(4):
+            ring = (int(max(abs(x - 1.5), abs(y - 5.5)) * 1.4) % 2 == 0)
+            ramp(img, x, y, [WOOD_M, WOOD_L, BONE_D], (0.55 if ring else 0.25)
+                 + hsh(x, y, 39) * 0.3)
+
+    for y in range(8, H):                                # боковины
+        for x in range(H):
+            n = hsh(x, y, 40) * 0.5 + hsh(x, y // 2, 41) * 0.5
+            ramp(img, x, y, [NIGHT, WOOD_D, WOOD_M], 0.15 + n * 0.75)
+
+    if lit:
+        for y in range(4, 8):                            # заполняем «дыру»
+            for x in range(4, H):
+                put(img, x, y, (12, 9, 8, 255))
+        for i in range(14):                              # угли
+            x, y = int(hsh(i, frame, 42) * 15), 8 + int(hsh(i, frame, 43) * 8)
+            ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L],
+                 0.35 + pulse * 0.45 + hsh(i, frame, 44) * 0.2)
+
+
+def campfire_fire(img, frame=0, nf=8):
+    """Пламя костра: ШИРОКОЕ ВНИЗУ, узкое вверху.
+
+    В ванильном клиенте верх текстуры — верх пламени, поэтому рисовать
+    «конус остриём вниз» нельзя: костёр выглядит перевёрнутым. Именно это
+    и случилось в первой версии пака.
+    """
+    ph = 2.0 * math.pi * frame / max(1, nf)
+    for y in range(H):
+        up = (H - 1 - y) / (H - 1.0)          # 0 у земли, 1 у кончика
+        half = 0.9 + 5.3 * (1.0 - up) ** 0.8   # внизу ~6 px, вверху ~1 px
+        wobble = math.sin(ph + y * 0.75) * (0.45 + 1.5 * up)
+        centre = 7.5 + wobble + (hsh(y, frame, 40) - 0.5) * 0.8
+        for x in range(H):
+            d = abs(x - centre) / max(0.8, half)
+            if d >= 1.0:
                 continue
-            for k in range(3):
-                y = top + k
-                shade = [0.75, 0.45, 0.22][k]
-                t = shade + hsh(x, y, 37) * 0.25
-                if x < 3 or x > 12:
-                    t *= 0.55
-                if lit and k == 0 and hsh(x, y, 38) > 0.62:
-                    ramp(img, x, y, [FIRE_D, FIRE_M], hsh(x, y, 39))
-                else:
-                    ramp(img, x, y, [WOOD_D, WOOD_M, WOOD_L], t)
-            ramp(img, x, top + 3, [NIGHT, (20, 14, 10)], 0.6)
+            t = (1.0 - d) * (0.52 + 0.45 * (1.0 - up)) + hsh(x, y + frame * 16, 41) * 0.16
+            ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L], t)
+    # искры над огнём
+    for i in range(3):
+        sx = 4 + int(hsh(i, frame, 42) * 9)
+        sy = 1 + int(hsh(i, frame, 43) * 6)
+        if img[sy][sx][3] == 0:
+            put(img, sx, sy, FIRE_M if i else FIRE_L)
 
 
-def campfire_fire(img):
+def pumpkin(img, top=False, face=False, lit=False):
+    """Тыква: рёбра (бок), круги (верх), вырезанная рожа (перед)."""
+    ORANGE_D, ORANGE_M, ORANGE_L = (96, 42, 8), (160, 74, 14), (214, 116, 26)
+    if top:
+        for y in range(H):
+            for x in range(W):
+                d = max(abs(x - 7.5), abs(y - 7.5)) / 8.0
+                rib = int(d * 6) % 2 == 0
+                ramp(img, x, y, [ORANGE_D, ORANGE_M, ORANGE_L],
+                     (0.7 if rib else 0.35) + 0.25 * (1 - d) + hsh(x, y, 60) * 0.1)
+        for y in range(6, 10):                       # черенок
+            for x in range(7, 9):
+                ramp(img, x, y, [(40, 44, 26), (64, 70, 38), (92, 100, 54)], 0.5 + hsh(x, y, 61) * 0.4)
+    else:
+        for y in range(H):
+            for x in range(W):
+                rib = (x % 5 == 0) or (x % 5 == 4 and hsh(x, y, 62) > 0.6)
+                t = (0.28 if rib else 0.72) + hsh(x, y, 63) * 0.22
+                if y < 2 or y > 13:
+                    t *= 0.65
+                ramp(img, x, y, [ORANGE_D, ORANGE_M, ORANGE_L], t)
+    if face:
+        eyes = [(4, 5), (5, 4), (5, 5), (5, 6), (10, 5), (11, 4), (11, 5), (11, 6)]
+        mouth = [(5, 9), (6, 10), (7, 10), (8, 10), (9, 10), (10, 9), (4, 8), (11, 8)]
+        for (x, y) in eyes + mouth:
+            if lit:
+                ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L], 0.75 + hsh(x, y, 64) * 0.25)
+            else:
+                put(img, x, y, (14, 9, 6, 255))
+        if lit:                                       # отсвет на тыкве
+            for (x, y) in eyes + mouth:
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    xx, yy = x + dx, y + dy
+                    if 0 <= xx < 16 and 0 <= yy < 16 and (xx, yy) not in eyes + mouth:
+                        p0 = img[yy][xx]
+                        img[yy][xx] = (min(255, p0[0] + 60), min(255, p0[1] + 26), min(255, p0[2] + 6), 255)
+
+
+def cobweb(img):
+    """Паутина: нити по диагоналям и «спираль» — на альфе, как в ваниле."""
+    for i in range(16):
+        for (x, y) in ((i, i), (15 - i, i), (i, i // 2 + 4), (15 - i, i // 2 + 4)):
+            if hsh(x, y, 65) > 0.25:
+                put(img, x, y, (222, 222, 214, 255) if hsh(x, y, 66) > 0.5 else (170, 172, 168, 255))
+    for (x, y) in ((7, 0), (8, 0), (0, 7), (0, 8), (15, 7), (15, 8), (7, 15), (8, 15)):
+        put(img, x, y, (196, 198, 192, 255))
+
+
+def mossy_bricks(img):
+    """Каменные кирпичи в мху: те же швы, что у stone_bricks, плюс мох."""
+    stone_bricks(img)
     for y in range(H):
         for x in range(W):
-            cxm = abs(x - 7.5) / 8.0
-            flame = 1.0 - y / 16.0 - cxm * 0.9 + hsh(x, y, 40) * 0.35
-            if flame > 0.25:
-                ramp(img, x, y, [FIRE_D, FIRE_M, FIRE_L], flame)
+            m = hsh(x // 3, y // 3, 67) * 0.55 + hsh(x, y, 68) * 0.45
+            if m > 0.58:
+                ramp(img, x, y, [(30, 46, 30), MOSS_M, MOSS_L], (m - 0.58) * 2.2)
 
 
 def wool(img, c):
@@ -497,18 +614,45 @@ def write_generic(path, img):
         f.write(png)
 
 
+def write_mcmeta(path, frametime, interpolate=False):
+    """Файл рядом с текстурой, без которого клиент НЕ анимирует картинку."""
+    anim = {"frametime": frametime}
+    if interpolate:
+        anim["interpolate"] = True
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"animation": anim}, f, ensure_ascii=False, indent=2)
+
+
+def strip(frames):
+    """[16×16, 16×16, …] → одна картинка 16×(16·N), как ждёт клиент."""
+    out = []
+    for img in frames:
+        out.extend(img)
+    return out
+
+
 def main():
     import shutil
     for d in (OUT_BLOCK, OUT_ITEM):
         if os.path.isdir(d):
             shutil.rmtree(d)
 
-    blocks = {}
+    blocks, animated = {}, {}
 
     def add(name, fn, *a, **kw):
         img = blank()
         fn(img, *a, **kw)
         blocks[name] = quantize(img)
+
+    def add_anim(name, fn, frames, frametime, interpolate=False, **kw):
+        """Рисует N кадров, кладёт ленту 16×(16N) и .png.mcmeta рядом."""
+        shots = []
+        for i in range(frames):
+            img = blank()
+            fn(img, frame=i, nf=frames, **kw)
+            shots.append(quantize(img))
+        blocks[name] = shots[0]                 # первый кадр — для предметов и превью
+        animated[name] = (shots, frametime, interpolate)
 
     add("stone", stone)
     add("dirt", dirt)
@@ -522,17 +666,17 @@ def main():
     add("deepslate_tiles", deepslate_tiles)
     add("stone_bricks", stone_bricks)
     add("sand", sand)
-    add("water_still", water)
+    add_anim("water_still", water, 16, 3)
     add("oak_log", log_side)
     add("oak_log_top", log_top)
     add("dark_oak_log", log_side, dark=True)
     add("dark_oak_log_top", log_top, dark=True)
-    add("pale_oak_leaves", leaves)
-    add("oak_leaves", leaves, pale=False)
+    add_anim("pale_oak_leaves", leaves, 4, 24)
+    add_anim("oak_leaves", leaves, 4, 24, pale=False)
     add("fern", fern)
-    add("sculk_vein", sculk_vein)
-    add("lantern", lantern)
-    add("soul_lantern", lantern, soul=True)
+    add_anim("sculk_vein", sculk_vein, 4, 12)
+    add_anim("lantern", lantern, 3, 8)
+    add_anim("soul_lantern", lantern, 3, 8, soul=True)
     add("torch", torch)
     add("soul_torch", torch, soul=True)
     add("candle", candle, lit=False)
@@ -541,16 +685,32 @@ def main():
     add("lodestone_side", lodestone_side)
     add("lodestone_top", lodestone_top)
     add("campfire_log", campfire_logs)
-    add("campfire_log_lit", campfire_logs, lit=True)
-    add("campfire_fire", campfire_fire)
+    add_anim("campfire_log_lit", campfire_logs, 4, 20, interpolate=True, lit=True)
+    add_anim("campfire_fire", campfire_fire, 8, 2)
     add("red_wool", wool, BLOOD_M)
     add("beacon", beacon)
+    # лобби: тыквы, паутина, замшелые кирпичи
+    add("pumpkin_side", pumpkin)
+    add("pumpkin_top", pumpkin, top=True)
+    add("carved_pumpkin", pumpkin, face=True)
+    add("jack_o_lantern", pumpkin, face=True, lit=True)
+    add("cobweb", cobweb)
+    add("mossy_stone_bricks", mossy_bricks)
     # дверь в 26.3 — две отдельные текстуры
     add("dark_oak_door_top", door, top=True)
     add("dark_oak_door_bottom", door, top=False)
 
     for name, img in blocks.items():
+        if name in animated:
+            continue
         write_png(os.path.join(OUT_BLOCK, name + ".png"), img)
+
+    for name, (shots, frametime, interpolate) in animated.items():
+        path = os.path.join(OUT_BLOCK, name + ".png")
+        write_generic(path, strip(shots))
+        write_mcmeta(path + ".mcmeta", frametime, interpolate)
+        print(f"  анимация {name}: {len(shots)} кадров, frametime {frametime}"
+              + (", interpolate" if interpolate else ""))
 
     items = {
         "lantern": blocks["lantern"],
@@ -571,7 +731,8 @@ def main():
         frames += 1
 
     write_generic(os.path.join(os.path.dirname(__file__), "..", "pack.png"), pack_icon())
-    print("блоков:", len(blocks), "| предметов:", len(items) + frames, "(в т.ч. кадров компаса:", frames, ")")
+    print("блоков:", len(blocks), "| из них анимированных:", len(animated),
+          "| предметов:", len(items) + frames, "(в т.ч. кадров компаса:", frames, ")")
 
 
 if __name__ == "__main__":
